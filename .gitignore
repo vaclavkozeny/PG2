@@ -1,4 +1,4 @@
-.vcpkg/
-.build/
+vcpkg/
+build/
 CMakeLists.txt
 *.json
