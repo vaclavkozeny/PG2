@@ -7,7 +7,6 @@
 
 #include <opencv4/opencv2/opencv.hpp>
 
-
 int main()
 {
     std::cout << "Hello!\n";
@@ -19,9 +18,14 @@ int main()
     cv::namedWindow("test_window");
 
     // try to open first camera of any type and grab single image
-    auto cam = cv::VideoCapture(0, cv::CAP_V4L2);
-    if (cam.isOpened())
-        cam.read(x);
+
+    auto cam = cv::VideoCapture(0, cv::CAP_ANY);
+    if (cam.isOpened()) {
+        // Skip the first 10-20 frames to let the sensor calibrate
+        for(int i = 0; i < 20; i++) {
+            cam.read(x);
+        }
+    }
 
     cv::imshow("test_window", x);
     cv::pollKey();
@@ -40,12 +44,8 @@ int main()
     glfwMakeContextCurrent(w);
 
     // demo: use glew
-    glewExperimental = GL_TRUE;
     auto s = glewInit();
-    if (s != GLEW_OK){
-        std::cout << "GLEW not ok! Error: " << glewGetErrorString(s) << "\n";
-        exit(123);
-    } 
+    if (s != GLEW_OK) exit(123);
 
     // wait for ESC key in GLFW window
     while (!glfwWindowShouldClose(w)) {
@@ -58,4 +58,4 @@ int main()
 
     std::cout << "Bye!\n";
     return 0;
-}   
+}
