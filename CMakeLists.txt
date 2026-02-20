@@ -19,7 +19,9 @@ elseif(UNIX)
 endif()
 
 set(PROJECT_SOURCES
-    helloworld.cpp
+    app.hpp
+    app.cpp
+    main.cpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
