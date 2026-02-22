@@ -11,6 +11,7 @@ find_package(glm           CONFIG REQUIRED)
 find_package(GLEW                 REQUIRED)
 find_package(glfw3         CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(OpenGL REQUIRED)
 
 if(WIN32)
     find_package(OpenCV CONFIG REQUIRED PATHS "<path to your opencv>")
@@ -19,6 +20,11 @@ elseif(UNIX)
 endif()
 
 set(PROJECT_SOURCES
+    gl_err_callback.h
+    gl_err_callback.cpp
+    getinfo.cpp
+    getinfo.hpp
+    assets.hpp
     app.hpp
     app.cpp
     main.cpp
@@ -27,6 +33,7 @@ set(PROJECT_SOURCES
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE 
+    OpenGL::GL
     GLEW::GLEW
     glfw
     glm::glm
