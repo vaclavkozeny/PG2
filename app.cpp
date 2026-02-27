@@ -29,6 +29,9 @@
 //---------------------------------------------------------------------
 #include "app.hpp"
 
+//#include "glerror.h"
+#include "gl_err_callback.h"
+
 App::App()
 {
     // default constructor
@@ -45,10 +48,16 @@ void App::initOpenGL() {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+
     window = glfwCreateWindow(800, 600, "OpenGL context", NULL, NULL);
     if (!window) throw std::runtime_error("Window creation failed");
     
     glfwMakeContextCurrent(window);
+
+    glfwSetWindowUserPointer(window, this);
+
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetKeyCallback(window, key_callback);
     
     glewExperimental = GL_TRUE; // Důležité pro Core Profile na Macu
     glewInit();
@@ -83,7 +92,27 @@ bool App::init()
         // GL init
         initOpenGL();
             
-        init_assets();  
+        init_assets();
+
+        if (GLEW_ARB_debug_output)
+        {
+            glDebugMessageCallback(MessageCallback, 0);
+            glEnable(GL_DEBUG_OUTPUT);
+            
+            //default is asynchronous debug output, use this to simulate glGetError() functionality
+            //glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+            
+            std::cout << "GL_DEBUG enabled." << std::endl;
+        }
+        else
+            std::cout << "GL_DEBUG NOT SUPPORTED!" << std::endl;
+
+        if (vsync)
+            glfwSwapInterval(1);
+        else
+            glfwSwapInterval(0);
+        
+        glfwSwapInterval((vsync?1:0));
     }
     catch (std::exception const& e) {
         std::cerr << "Init failed : " << e.what() << std::endl;
@@ -188,14 +217,31 @@ int App::run(void)
         if (uniform_color_location == -1) {
             std::cerr << "Uniform location is not found in active shader program. Did you forget to activate it?\n";
         }
+
+        lastTime = glfwGetTime();
+        frameCount = 0;
         
         while (!glfwWindowShouldClose(window)) {
+            double currentTime = glfwGetTime();
+            frameCount++;
+
+            // update every second
+            if (currentTime - lastTime >= 1.0)
+            {
+                double fps = frameCount / (currentTime - lastTime);
+
+                std::string title = "OpenGL context - FPS: " + std::to_string((int)fps);
+                glfwSetWindowTitle(window, title.c_str());
+
+                frameCount = 0;
+                lastTime = currentTime;
+            }
             // clear canvas
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             //set uniform parameter for shader
             // (try to change the color in key callback)          
-            glUniform4f(uniform_color_location, r, g, b, a);
+            glUniform4f(uniform_color_location, triangle_r, g, b, a);
             
             //bind 3d object data
             glBindVertexArray(VAO_ID);
@@ -215,6 +261,37 @@ int App::run(void)
     
     std::cout << "Finished OK...\n";
     return EXIT_SUCCESS;
+}
+
+
+void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+    App* app = static_cast<App*>(glfwGetWindowUserPointer(window));
+
+    app->triangle_r += yoffset * 0.05f;
+
+    if (app->triangle_r > 1.0f) app->triangle_r = 1.0f;
+    if (app->triangle_r < 0.0f) app->triangle_r = 0.0f;
+}
+
+void App::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    App* app = static_cast<App*>(glfwGetWindowUserPointer(window));
+    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+		switch (key) {
+		case GLFW_KEY_ESCAPE:
+			std::cout << "ESC has been pressed!\n";
+			glfwSetWindowShouldClose(window, GLFW_TRUE);
+			break;
+        case GLFW_KEY_V:
+            app->vsync = !app->vsync;
+            glfwSwapInterval(app->vsync ? 1 : 0);
+
+            std::cout << "VSync: "
+                      << (app->vsync ? "ON" : "OFF")
+                      << std::endl;
+        default:
+            break;
+        }
+    }
 }
 
 App::~App()

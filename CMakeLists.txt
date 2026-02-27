@@ -22,6 +22,8 @@ set(PROJECT_SOURCES
     main.cpp
     app.cpp
     app.hpp
+    gl_err_callback.cpp
+    glerror.cpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
