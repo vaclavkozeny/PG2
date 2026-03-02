@@ -12,6 +12,7 @@ find_package(GLEW                 REQUIRED)
 find_package(glfw3         CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(imgui REQUIRED)
 
 if(WIN32)
     find_package(OpenCV CONFIG REQUIRED PATHS "<path to your opencv>")
@@ -20,6 +21,7 @@ elseif(UNIX)
 endif()
 
 set(PROJECT_SOURCES
+    fps_meter.hpp
     gl_err_callback.h
     gl_err_callback.cpp
     getinfo.cpp
@@ -39,6 +41,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     glm::glm
     nlohmann_json::nlohmann_json
     ${OpenCV_LIBS}
+    imgui::imgui
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
