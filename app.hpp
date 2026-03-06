@@ -17,8 +17,14 @@ public:
     void init_assets(void);
     GLFWwindow* window = nullptr;
 
+    bool isFullScreen = false;
+    int savedXPos = 0, savedYPos = 0;
+    int savedWidth = 800, savedHeight = 600;
+
     static void glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
     static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    void toggle_fullscreen(GLFWwindow* window);
+    GLFWmonitor* GetCurrentMonitor(GLFWwindow* window);
 
     float triangle_r = 0.0f;
 

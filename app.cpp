@@ -403,3 +403,60 @@ void App::init_glfw(void)
 	glfwSetKeyCallback(window, glfw_key_callback);
 	glfwSetScrollCallback(window, glfw_scroll_callback);
 }
+
+void App::toggle_fullscreen(GLFWwindow* window) {
+    if (isFullScreen) {
+        // --- RESTORE TO WINDOWED MODE ---
+        glfwSetWindowMonitor(window, nullptr, savedXPos, savedYPos, savedWidth, savedHeight, GLFW_DONT_CARE);
+        isFullScreen = false;
+    } else {
+        // --- SWITCH TO FULLSCREEN MODE ---
+        // 1. Save current window position and size
+        glfwGetWindowPos(window, &savedXPos, &savedYPos);
+        glfwGetWindowSize(window, &savedWidth, &savedHeight);
+
+        // 2. Determine which monitor the window is currently on
+        GLFWmonitor* monitor = GetCurrentMonitor(window);
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+
+        // 3. Switch to fullscreen on that specific monitor
+        glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+        isFullScreen = true;
+    }
+}
+
+GLFWmonitor* App::GetCurrentMonitor(GLFWwindow* window) {
+    // get all monitors
+    int monitorCount;
+    GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+    if (!monitors) return glfwGetPrimaryMonitor();
+
+    //store window params
+    int windowX, windowY, windowWidth, windowHeight;
+    glfwGetWindowPos(window, &windowX, &windowY);
+    glfwGetWindowSize(window, &windowWidth, &windowHeight);
+
+    GLFWmonitor* bestMonitor = nullptr;
+    int bestOverlapArea = 0;
+
+    //find best overlap
+    for (int i = 0; i < monitorCount; i++) {
+        GLFWmonitor* monitor = monitors[i];
+        
+        int monitorX, monitorY;
+        glfwGetMonitorPos(monitor, &monitorX, &monitorY);
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        if (!mode) continue;
+
+        // Calculate the intersection (overlap) between the window and the monitor
+        int overlapX = std::max(0, std::min(windowX + windowWidth, monitorX + mode->width) - std::max(windowX, monitorX));
+        int overlapY = std::max(0, std::min(windowY + windowHeight, monitorY + mode->height) - std::max(windowY, monitorY));
+        int overlapArea = overlapX * overlapY;
+
+        if (overlapArea > bestOverlapArea) {
+            bestOverlapArea = overlapArea;
+            bestMonitor = monitor;
+        }
+    }
+    return bestMonitor ? bestMonitor : glfwGetPrimaryMonitor();
+}
