@@ -310,9 +310,6 @@ void App::mouse_button_callback(GLFWwindow* window, int button, int action, int 
 }
 void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     App* app = (App*)glfwGetWindowUserPointer(window);
-    app->bg_r = app->bg_r + (float)yoffset * 0.05f;
-    app->bg_g = app->bg_g + (float)yoffset * 0.05f;
-    app->bg_b = app->bg_b + (float)yoffset * 0.05f;
 }
 // ========================================================================= //
 //                              HELPER FUNCTIONS                             //

@@ -21,6 +21,9 @@ elseif(UNIX)
 endif()
 
 set(PROJECT_SOURCES
+    mesh.hpp
+    shader_program.hpp
+    shader_program.cpp
     fps_meter.hpp
     gl_err_callback.h
     gl_err_callback.cpp
