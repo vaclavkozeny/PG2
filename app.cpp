@@ -26,6 +26,14 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "assets.hpp"
+
+// ImGUI headers
+#include <imgui.h>               // main ImGUI header
+#include <imgui_impl_glfw.h>     // GLFW bindings
+#include <imgui_impl_opengl3.h>  // OpenGL bindings
+
+#include "fps_meter.hpp"
+
 //---------------------------------------------------------------------
 #include "app.hpp"
 
@@ -40,14 +48,21 @@ App::App()
 }
 
 void App::initOpenGL() {
-    if (!glfwInit()) throw std::runtime_error("GLFW init failed");
+    /* Initialize the library */
+	glfwSetErrorCallback(glfw_error_callback);
+
+	if (!glfwInit()) {
+		throw std::runtime_error("GLFW can not be initialized.");
+	}
+
+	// open window, but hidden - it will be enabled later, after asset initialization
+	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     // Na Macu musíme explicitně říct, že chceme Core Profile 4.1
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
 
     window = glfwCreateWindow(800, 600, "OpenGL context", NULL, NULL);
     if (!window) throw std::runtime_error("Window creation failed");
@@ -56,34 +71,28 @@ void App::initOpenGL() {
 
     glfwSetWindowUserPointer(window, this);
 
-    glfwSetScrollCallback(window, scroll_callback);
-    glfwSetKeyCallback(window, key_callback);
-    
-    glewExperimental = GL_TRUE; // Důležité pro Core Profile na Macu
+    // disable mouse cursor
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+	// GLFW callbacks registration
+	glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
+	glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
+	glfwSetKeyCallback(window, glfw_key_callback);
+	glfwSetScrollCallback(window, glfw_scroll_callback);
+
+    glewExperimental = GL_TRUE;
     glewInit();
+}
 
-    // init glfw
-    // https://www.glfw.org/documentation.html
-    // TODO: add error checking!
-    //glfwInit();
-
-    // open window (GL canvas) with no special properties
-    // https://www.glfw.org/docs/latest/quick.html#quick_create_window
-    // TODO: add error checking!
-    //window = glfwCreateWindow(800, 600, "OpenGL context", NULL, NULL);
-    //glfwMakeContextCurrent(window);
-    
-    // init glew
-    // http://glew.sourceforge.net/basic.html
-    // TODO: add error checking!
-    //glewInit();
-    //wglewInit();
-
-    //if (!GLEW_ARB_direct_state_access)
-    //    throw std::runtime_error("No DSA :-(");
-        
-        
-    //TODO: get info about your GL context    
+void App::init_imgui()
+{
+	// see https://github.com/ocornut/imgui/wiki/Getting-Started
+	
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init();
+	std::cout << "ImGUI version: " << ImGui::GetVersion() << "\n";
 }
 
 bool App::init()
@@ -92,8 +101,6 @@ bool App::init()
         // GL init
         initOpenGL();
             
-        init_assets();
-
         if (GLEW_ARB_debug_output)
         {
             glDebugMessageCallback(MessageCallback, 0);
@@ -113,6 +120,17 @@ bool App::init()
             glfwSwapInterval(0);
         
         glfwSwapInterval((vsync?1:0));
+
+        //if (!std::filesystem::exists("resources"))
+		//	throw std::runtime_error("Directory 'resources' not found. Various media files are expected to be there.");
+		
+		init_glfw();
+
+		init_assets();
+
+		init_imgui();
+
+		glfwShowWindow(window);
     }
     catch (std::exception const& e) {
         std::cerr << "Init failed : " << e.what() << std::endl;
@@ -220,10 +238,25 @@ int App::run(void)
 
         lastTime = glfwGetTime();
         frameCount = 0;
-        
+        fps_meter FPS;
+
         while (!glfwWindowShouldClose(window)) {
+            glfwPollEvents();
             double currentTime = glfwGetTime();
             frameCount++;
+
+            // 2. Start ImGui Frame
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+
+            // 3. Define the UI
+            {
+                ImGui::Begin("Performance");
+                ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+                ImGui::Text("Frame time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+                ImGui::End();
+            }
 
             // update every second
             if (currentTime - lastTime >= 1.0)
@@ -250,8 +283,20 @@ int App::run(void)
             glDrawArrays(GL_TRIANGLES, 0, triangle_vertices.size());
 
             // poll events, call callbacks, flip back<->front buffer
-            glfwPollEvents();
-            glfwSwapBuffers(window);    
+            //glfwPollEvents();
+            //glfwSwapBuffers(window);    
+
+            if (FPS.is_updated()) // display new value only once per interval (default = 1.0s)
+			std::cout << "FPS: " << FPS.get() << std::endl;
+            
+            // 5. Finalize and Render ImGui
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+            // 6. Swap Buffers
+            glfwSwapBuffers(window);
+            
+            FPS.update();
         }
     }
     catch (std::exception const& e) {
@@ -263,7 +308,8 @@ int App::run(void)
     return EXIT_SUCCESS;
 }
 
-
+// MOJE CALLBACKY
+/*
 void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     App* app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
@@ -293,6 +339,7 @@ void App::key_callback(GLFWwindow* window, int key, int scancode, int action, in
         }
     }
 }
+*/
 
 App::~App()
 {
@@ -301,7 +348,58 @@ App::~App()
     if (VBO_ID) glDeleteBuffers(1, &VBO_ID);
     if (VAO_ID) glDeleteVertexArrays(1, &VAO_ID);
 
+    ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+
+	// clean-up GLFW
+	if (window) {
+		glfwDestroyWindow(window);
+		window = nullptr;
+	}
+	glfwTerminate();
+
     // clean-up
     cv::destroyAllWindows();
     std::cout << "Bye...\n";
+}
+
+
+void App::init_glfw(void)
+{
+
+	/* Initialize the library */
+	glfwSetErrorCallback(glfw_error_callback);
+
+	if (!glfwInit()) {
+		throw std::runtime_error("GLFW can not be initialized.");
+	}
+
+	// try to open OpenGL
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+	// open window, but hidden - it will be enabled later, after asset initialization
+	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+
+	/* Create a windowed mode window and its OpenGL context */
+	window = glfwCreateWindow(800, 600, "ICP", nullptr, nullptr);
+	if (!window) {
+		throw std::runtime_error("GLFW window can not be created.");
+	}
+
+	glfwSetWindowUserPointer(window, this);
+
+	/* Make the window's context current */
+	glfwMakeContextCurrent(window);
+
+	// disable mouse cursor
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+	// GLFW callbacks registration
+	glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
+	glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
+	glfwSetKeyCallback(window, glfw_key_callback);
+	glfwSetScrollCallback(window, glfw_scroll_callback);
 }

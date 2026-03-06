@@ -12,6 +12,8 @@ find_package(GLEW                 REQUIRED)
 find_package(glfw3         CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
+find_package(imgui CONFIG REQUIRED)
+
 if(WIN32)
     find_package(OpenCV CONFIG REQUIRED PATHS "<path to your opencv>")
 elseif(UNIX)
@@ -24,6 +26,8 @@ set(PROJECT_SOURCES
     app.hpp
     gl_err_callback.cpp
     glerror.cpp
+    callbacks.cpp
+    fps_meter.hpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
@@ -32,6 +36,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     GLEW::GLEW
     glfw
     glm::glm
+    imgui::imgui
     nlohmann_json::nlohmann_json
     ${OpenCV_LIBS}
 )
