@@ -28,6 +28,10 @@ set(PROJECT_SOURCES
     glerror.cpp
     callbacks.cpp
     fps_meter.hpp
+    non_copyable.hpp
+    ShaderProgram.cpp
+    ShaderProgram.hpp
+    Mesh.hpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})

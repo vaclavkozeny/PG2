@@ -3,6 +3,7 @@
 #include "assets.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include "ShaderProgram.hpp"
 
 #pragma once
 
@@ -32,6 +33,8 @@ public:
     int frameCount = 0;
 
     bool vsync = false;
+
+    std::unordered_map<std::string, std::shared_ptr<ShaderProgram>> shader_library;
 
     ~App();
 private:

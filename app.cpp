@@ -144,42 +144,16 @@ void App::init_assets(void) {
     //
     // Initialize pipeline: compile, link and use shaders
     //
-    
-    // SHADERS - Upraveno na verzi 410 pro macOS (Apple Silicon)
-    const char* vertex_shader =
-        "#version 410 core\n"
-        "layout(location = 0) in vec3 attribute_Position;"
-        "void main() {"
-        "  gl_Position = vec4(attribute_Position, 1.0);"
-        "}";
-
-    const char* fragment_shader =
-        "#version 410 core\n"
-        "uniform vec4 uniform_Color;"
-        "out vec4 FragColor;"
-        "void main() {"
-        "  FragColor = uniform_Color;"
-        "}";
-    
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vertex_shader, NULL);
-    glCompileShader(vs);
-    
-    // TODO: Zde by bylo dobré zkontrolovat chyby kompilace (glGetShaderiv)
-
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fragment_shader, NULL);
-    glCompileShader(fs);
-    
-    shader_prog_ID = glCreateProgram();
-    glAttachShader(shader_prog_ID, fs);
-    glAttachShader(shader_prog_ID, vs);
-    glLinkProgram(shader_prog_ID);
-    
-    glDetachShader(shader_prog_ID, fs);
-    glDetachShader(shader_prog_ID, vs);
-    glDeleteShader(vs);
-    glDeleteShader(fs);
+    shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>(
+        std::filesystem::path("./basic.vert"), 
+        std::filesystem::path("./basic.frag")
+    ));
+    shader_library.emplace("rainbow", std::make_shared<ShaderProgram>(
+        std::filesystem::path("./basic.vert"), 
+        std::filesystem::path("./GL_rainbow.frag")
+    ));
+    //shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>("basic.vert","basic.frag"));
+    //shader_library.emplace("rainbow", std::make_shared<ShaderProgram>("basic.vert","GL_rainbow.frag"));
 
     // 
     // Create and load data into GPU - "Old-school" Bind-to-Edit styl (Mac kompatibilní)
@@ -269,23 +243,21 @@ int App::run(void)
                 frameCount = 0;
                 lastTime = currentTime;
             }
-            // clear canvas
+
+            // nejde to dopici
+            // uniform vec3 ve frag shaderu
+           
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            //set uniform parameter for shader
-            // (try to change the color in key callback)          
-            glUniform4f(uniform_color_location, triangle_r, g, b, a);
+            auto shader = shader_library.at("simple_shader");
             
-            //bind 3d object data
+            shader->use(); 
+            
+            shader->setUniform("color", glm::vec3(triangle_r, 1.0, b)); 
+
             glBindVertexArray(VAO_ID);
-
-            // draw all VAO data
             glDrawArrays(GL_TRIANGLES, 0, triangle_vertices.size());
-
-            // poll events, call callbacks, flip back<->front buffer
-            //glfwPollEvents();
-            //glfwSwapBuffers(window);    
-
+            
             if (FPS.is_updated()) // display new value only once per interval (default = 1.0s)
 			std::cout << "FPS: " << FPS.get() << std::endl;
             
