@@ -30,6 +30,7 @@
 
 using json = nlohmann::json;
 
+#include "meshgen.hpp"
 
 App::App()
 {
@@ -63,45 +64,15 @@ void error_callback(int error, const char* description) {
     std::cerr << "Error: " << description << std::endl;
 }
 void App::init_assets(void) {
-    //
-    // Initialize pipeline: compile, link and use shaders
-    //
+    shader_library.emplace("simple_shader", std::make_shared<shader_program>((std::filesystem::path)"basic.vert",(std::filesystem::path)"basic.frag"));
+    shader_library.emplace("rainbow", std::make_shared<shader_program>((std::filesystem::path)"basic.vert",(std::filesystem::path)"GL_rainbow.frag")); 
     
-    //SHADERS - define & compile & link
-    const char* vertex_shader =
-        "#version 460 core\n"
-        "in vec3 attribute_Position;"
-        "void main() {"
-        "  gl_Position = vec4(attribute_Position, 1.0);"
-        "}";
-
-    const char* fragment_shader =
-        "#version 460 core\n"
-        "uniform vec4 uniform_Color;"
-        "out vec4 FragColor;"
-        "void main() {"
-        "  FragColor = uniform_Color;"
-        "}";
-    
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vertex_shader, NULL);
-    glCompileShader(vs);
-    
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fragment_shader, NULL);
-    glCompileShader(fs);
-    
-    shader_prog_ID = glCreateProgram();
-    glAttachShader(shader_prog_ID, fs);
-    glAttachShader(shader_prog_ID, vs);
-    glLinkProgram(shader_prog_ID);
-    
-    //now we can delete shader parts (they can be reused, if you have more shaders)
-    //the final shader program already linked and stored separately
-    glDetachShader(shader_prog_ID, fs);
-    glDetachShader(shader_prog_ID, vs);
-    glDeleteShader(vs);
-    glDeleteShader(fs);
+    mesh_library.emplace("cube", generateCube());
+    //mesh_library.emplace("sphere", generateSphere(36, 18));
+    Model m;
+    m.addMesh(mesh_library.at("cube"), shader_library.at("rainbow"));
+    //m.addMesh(mesh_library.at("sphere"), shader_library.at("rainbow"));
+    scene.emplace("my_complex_object", m); 
 
     // 
     // Create and load data into GPU using OpenGL DSA (Direct State Access)
@@ -110,11 +81,11 @@ void App::init_assets(void) {
     // Create VAO + data description (similar to container)
     glCreateVertexArrays(1, &VAO_ID);
 
-    GLint position_attrib_location = glGetAttribLocation(shader_prog_ID, "attribute_Position");
+    GLuint pos_loc = Mesh::attribute_location_position;
 
-    glEnableVertexArrayAttrib(VAO_ID, position_attrib_location);
-    glVertexArrayAttribFormat(VAO_ID, position_attrib_location, glm::vec3::length(), GL_FLOAT, GL_FALSE, offsetof(vertex, position));
-    glVertexArrayAttribBinding(VAO_ID, position_attrib_location, 0); // (GLuint vaobj, GLuint attribindex, GLuint bindingindex)
+    glEnableVertexArrayAttrib(VAO_ID, pos_loc);
+    glVertexArrayAttribFormat(VAO_ID, pos_loc, glm::vec3::length(), GL_FLOAT, GL_FALSE, offsetof(vertex, position));
+    glVertexArrayAttribBinding(VAO_ID, pos_loc, 0);
 
     // Create and fill data
     glCreateBuffers(1, &VBO_ID);
@@ -122,6 +93,7 @@ void App::init_assets(void) {
 
     // Connect together
     glVertexArrayVertexBuffer(VAO_ID, 0, VBO_ID, 0, sizeof(vertex)); // (GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride)
+
 }
 void App::init_gl(void){
     load_config("config.json");
@@ -206,7 +178,12 @@ int App::run(void)
     fps_meter FPS;
     try {
         while (!glfwWindowShouldClose(window)) {
-            double t = glfwGetTime();
+            GLfloat t = glfwGetTime();
+
+            auto current_shader = shader_library.at("rainbow"); // crated a copy of shared pointer. Shader is guaranteed to live.
+            current_shader->use();
+            
+
             if (show_imgui) {
 				ImGui_ImplOpenGL3_NewFrame();
 				ImGui_ImplGlfw_NewFrame();
@@ -225,20 +202,31 @@ int App::run(void)
             triangle_r = (float)(sin(t * 1.0f) * 0.5 + 0.5); 
             triangle_g = (float)(sin(t * 1.3f) * 0.5 + 0.5); 
             triangle_b = (float)(sin(t * 1.7f) * 0.5 + 0.5);
+
+            current_shader->setUniform("iTime", t);
+
             // clear canvas
             glClearColor(bg_r,bg_g,bg_b,0.5f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+            //scene.at("my_complex_object").origin += glm::vec3(0.1, 0.0, 0.0); // move it slightly
+            
+            // draw all models in the scene
+            for (auto& model : scene) {
+                //model.second.update(t);
+                model.second.draw();
+            }
             //set uniform parameter for shader
             // (try to change the color in key callback)          
-            glUniform4f(uniform_color_location, triangle_r, triangle_g, triangle_b, a);
+            //glUniform4f(uniform_color_location, triangle_r, triangle_g, triangle_b, a);
             
+            /*
             //bind 3d object data
             glBindVertexArray(VAO_ID);
 
             // draw all VAO data
             glDrawArrays(GL_TRIANGLES, 0, triangle_vertices.size());
-
+            */
             // poll events, call callbacks, flip back<->front buffer
             glfwPollEvents();
             if (show_imgui) {

@@ -11,7 +11,7 @@
 // set uniform according to name 
 // https://docs.gl/gl4/glUniform
 
-ShaderProgram::ShaderProgram(const std::string & vertex_shader_code, const std::string & fragment_shader_code) {
+shader_program::shader_program(const std::string & vertex_shader_code, const std::string & fragment_shader_code) {
     // compile shaders and store IDs for linker
     auto vertex_shader   = compile_shader(vertex_shader_code, GL_VERTEX_SHADER);
     auto fragment_shader = compile_shader(fragment_shader_code, GL_FRAGMENT_SHADER);
@@ -22,11 +22,11 @@ ShaderProgram::ShaderProgram(const std::string & vertex_shader_code, const std::
     ID = link_shader(shader_ids);
 }
 
-ShaderProgram::ShaderProgram(const std::filesystem::path & VS_file, const std::filesystem::path & FS_file) :
-    ShaderProgram{read_text_file(VS_file), read_text_file(FS_file)} {}
+shader_program::shader_program(const std::filesystem::path & VS_file, const std::filesystem::path & FS_file) :
+    shader_program{textFileRead(VS_file), textFileRead(FS_file)} {}
 
 // Get location or write error to console
-GLuint ShaderProgram::getUniformLocation(const std::string & name) {
+GLuint shader_program::getUniformLocation(const std::string & name) {
     // deferred (lazy) cache generation
     
     // Check if the location is already cached
@@ -44,42 +44,57 @@ GLuint ShaderProgram::getUniformLocation(const std::string & name) {
     return loc;
 }
 
-GLint ShaderProgram::getAttribLocation(const std::string & name) {
-    GLint loc = glGetAttribLocation(ID, name);
+GLint shader_program::getAttribLocation(const std::string & name) {
+    GLint loc = glGetAttribLocation(ID, name.c_str());
     if (loc == -1) {
         std::cerr << "No vertex attribute with name: " << name << ", or reserved name (starting with gl_)\n";
+    }
     return loc;
 }
 
 // Uniform setting
 
-void ShaderProgram::setUniform(const std::string& name, const GLfloat val) {
+void shader_program::setUniform(const std::string& name, const GLfloat val) {
     auto loc = getUniformLocation(name);
     glProgramUniform1f(ID, loc, val);
 }
 
-void ShaderProgram::setUniform(const std::string& name, const glm::vec4 & in_vec4) {
+void shader_program::setUniform(const std::string& name, const GLint val) {
+    auto loc = getUniformLocation(name);
+    glProgramUniform1i(ID, loc, val);
+}
+
+void shader_program::setUniform(const std::string& name, const glm::vec3 & val) {
+    auto loc = getUniformLocation(name);
+    glProgramUniform3fv(ID, loc, 1, glm::value_ptr(val));
+}
+
+void shader_program::setUniform(const std::string& name, const glm::vec4 & val) {
     auto loc = getUniformLocation(name);
     glProgramUniform4fv(ID, loc, 1, glm::value_ptr(val));
 }
 
-void ShaderProgram::setUniform(const std::string& name, const glm::mat3 & val) {
+void shader_program::setUniform(const std::string& name, const glm::mat3 & val) {
     auto loc = getUniformLocation(name);
 	glProgramUniformMatrix3fv(ID, loc, 1, GL_FALSE, glm::value_ptr(val));
 }
 
-void ShaderProgram::setUniform(const std::string & name, const std::vector<GLint>& val) {
+void shader_program::setUniform(const std::string& name, const glm::mat4 & val) {
+    auto loc = getUniformLocation(name);
+	glProgramUniformMatrix4fv(ID, loc, 1, GL_FALSE, glm::value_ptr(val));
+}
+
+void shader_program::setUniform(const std::string & name, const std::vector<GLint>& val) {
     auto loc = getUniformLocation(name);
     glProgramUniform1iv(ID, loc, val.size(), reinterpret_cast<GLint const*>(val.data()));
 }
 
-   
-void ShaderProgram::setUniform(const std::string & name, const std::vector<glm::vec3>& val) {
+void shader_program::setUniform(const std::string & name, const std::vector<glm::vec3>& val) {
     auto loc = getUniformLocation(name);
     glProgramUniform3fv(ID, loc, val.size(), glm::value_ptr(val[0]));
 }
-    
-std::string ShaderProgram::getShaderInfoLog(const GLuint obj) {
+
+std::string shader_program::getShaderInfoLog(const GLuint obj) {
     int log_length = 0;
     std::string s;
     glGetShaderiv(obj, GL_INFO_LOG_LENGTH, &log_length);
@@ -91,7 +106,7 @@ std::string ShaderProgram::getShaderInfoLog(const GLuint obj) {
     return s;
 }
 
-std::string ShaderProgram::getProgramInfoLog(const GLuint obj) {
+std::string shader_program::getProgramInfoLog(const GLuint obj) {
     int log_length = 0;
     std::string s;
     glGetProgramiv(obj, GL_INFO_LOG_LENGTH, &log_length);
@@ -103,7 +118,7 @@ std::string ShaderProgram::getProgramInfoLog(const GLuint obj) {
     return s;
 }
 
-GLuint ShaderProgram::compile_shader(const std::string & source_code, const GLenum type) {
+GLuint shader_program::compile_shader(const std::string & source_code, const GLenum type) {
     char const *src_cstr = source_code.c_str();
 
     GLuint shader_ID = glCreateShader(type);
@@ -123,7 +138,7 @@ GLuint ShaderProgram::compile_shader(const std::string & source_code, const GLen
     return shader_ID;
 }
 
-GLuint ShaderProgram::link_shader(const std::vector<GLuint> shader_ids) {
+GLuint shader_program::link_shader(const std::vector<GLuint> shader_ids) {
 	GLuint prog_ID = glCreateProgram();
 
 	for (const auto & id : shader_ids)
@@ -156,7 +171,7 @@ GLuint ShaderProgram::link_shader(const std::vector<GLuint> shader_ids) {
 	return prog_ID;
 }
 
-std::string ShaderProgram::textFileRead(const std::filesystem::path& filepath) {
+std::string shader_program::textFileRead(const std::filesystem::path& filepath) {
 	std::ifstream file(filepath);
 	if (!file.is_open())
 		throw std::runtime_error(std::string("Error opening file: ") + filepath.string());

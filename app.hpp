@@ -1,6 +1,13 @@
 #pragma once
 #include "assets.hpp"
 #include <GLFW/glfw3.h>
+#include <unordered_map>
+#include <memory>  // smart pointers
+
+#include "shader_program.hpp"
+#include "mesh.hpp"
+#include "model.hpp"
+
 class App {
 public:
     App();
@@ -19,6 +26,10 @@ private:
     int savedXPos = 0, savedYPos = 0;
     int savedWidth = 800, savedHeight = 600;
 
+    std::unordered_map<std::string, std::shared_ptr<shader_program>> shader_library;
+    std::unordered_map<std::string, std::shared_ptr<Mesh>> mesh_library;
+    std::unordered_map<std::string, Model> scene; 
+
     void init_assets(void);
     void init_gl(void);
     void load_config(std::string filename);
@@ -35,10 +46,14 @@ private:
     GLfloat bg_r, bg_g, bg_b = 0.0f;
     std::vector<vertex> triangle_vertices =
     {
-    	{{0.0f,  0.5f,  0.0f}},
-    	{{0.5f, -0.5f,  0.0f}},
-    	{{-0.5f, -0.5f,  0.0f}}
-    };
+        {{-0.5f, -0.5f,  0.0f}},
+        {{ 0.5f, -0.5f,  0.0f}},
+        {{ 0.5f,  0.5f,  0.0f}},
+
+        {{-0.5f, -0.5f,  0.0f}},
+        {{ 0.5f,  0.5f,  0.0f}},
+        {{-0.5f,  0.5f,  0.0f}} 
+    }; 
     struct WindowConfig {
         int width;
         int height;

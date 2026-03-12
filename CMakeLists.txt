@@ -21,6 +21,8 @@ elseif(UNIX)
 endif()
 
 set(PROJECT_SOURCES
+    meshgen.cpp
+    model.hpp
     mesh.hpp
     shader_program.hpp
     shader_program.cpp

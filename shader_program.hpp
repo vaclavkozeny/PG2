@@ -9,17 +9,17 @@
 
 #include "non_copyable.hpp"
 
-class ShaderProgram : private NonCopyable {
+class shader_program : private NonCopyable {
 public:
     // No default constructor. RAII - if constructed, it will be correctly initialized
     // and can be rendered. OpenGL resources are guaranteed to be deallocated using destructor. 
     // Double-free errors are prevented by making class non-copyable (therefore 
     // double destruction of the same OpenGL shader is prevented). 
-    ShaderProgram(void) = delete; //does nothing
+    shader_program(void) = delete; //does nothing
 
     // you can add more constructors for pipeline with GS, TS etc.
-    ShaderProgram(std::string const & vertex_shader_code, std::string const & fragment_shader_code);
-    ShaderProgram(std::filesystem::path const & VS_file, std::filesystem::path const & FS_file);
+    shader_program(std::string const & vertex_shader_code, std::string const & fragment_shader_code);
+    shader_program(std::filesystem::path const & VS_file, std::filesystem::path const & FS_file);
 
     // activate shader
     void use(void) {  
@@ -34,10 +34,10 @@ public:
     // deactivate current shader program (i.e. activate shader no. 0)
     void deactivate(void) { 
         glUseProgram(0); 
-        currently_used = 0; 
+        currently_used_ID = 0; 
     };   
 
-    ~ShaderProgram(void) {  //deallocate shader program
+    ~shader_program(void) {  //deallocate shader program
         deactivate();
         glDeleteProgram(ID);
         ID = 0;
@@ -61,7 +61,7 @@ public:
 
 private:
     GLuint ID{0}; // default = 0, empty shader
-    inline static GLuint currently_used{0};
+    inline static GLuint currently_used_ID{0};
     std::unordered_map<std::string, GLuint> uniform_location_cache;
 
     GLuint getUniformLocation(const std::string & name);
