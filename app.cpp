@@ -124,7 +124,7 @@ bool App::init()
         //if (!std::filesystem::exists("resources"))
 		//	throw std::runtime_error("Directory 'resources' not found. Various media files are expected to be there.");
 		
-		init_glfw();
+		//init_glfw();
 
 		init_assets();
 
@@ -170,20 +170,20 @@ void App::init_assets(void) {
 
     // 3. Propojení dat z VBO do Shaderu
     // Hledáme, kde v shaderu je proměnná "attribute_Position"
-    GLint position_attrib_location = glGetAttribLocation(shader_prog_ID, "attribute_Position");
-    
+    // Místo shader_prog_ID použij ID z knihovny
+
+    auto shader = shader_library.at("rainbow");
+    // Musí se jmenovat "aPos" jako ve vert souboru!
+    GLint position_attrib_location = shader->getAttribLocation("aPos"); 
+
     if (position_attrib_location != -1) {
         glEnableVertexAttribArray(position_attrib_location);
         glVertexAttribPointer(
             position_attrib_location, 
-            3,                          // x, y, z
-            GL_FLOAT, 
-            GL_FALSE, 
-            sizeof(vertex),             // velikost jedné struktury vertex
-            (void*)offsetof(vertex, position) // posun pozice v rámci struktury
+            3, GL_FLOAT, GL_FALSE, 
+            sizeof(vertex), 
+            (void*)offsetof(vertex, position)
         );
-    } else {
-        std::cerr << "Chyba: Atribut 'attribute_Position' nebyl v shaderu nalezen!\n";
     }
 
     // 4. Cleanup bindů - aby se další operace omylem nepropsaly sem
@@ -202,13 +202,13 @@ int App::run(void)
 
         // Activate shader program. There is only one program, so activation can be out of the loop. 
         // In more realistic scenarios, you will activate different shaders for different 3D objects.
-        glUseProgram(shader_prog_ID);
+        //glUseProgram(shader_prog_ID);
         
         // Get uniform location in GPU program. This will not change, so it can be moved out of the game loop.
-        GLint uniform_color_location = glGetUniformLocation(shader_prog_ID, "uniform_Color");
-        if (uniform_color_location == -1) {
-            std::cerr << "Uniform location is not found in active shader program. Did you forget to activate it?\n";
-        }
+        //GLint uniform_color_location = glGetUniformLocation(shader_prog_ID, "uniform_Color");
+        //if (uniform_color_location == -1) {
+        //    std::cerr << "Uniform location is not found in active shader program. Did you forget to activate it?\n";
+        //}
 
         lastTime = glfwGetTime();
         frameCount = 0;
@@ -249,7 +249,7 @@ int App::run(void)
            
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            auto shader = shader_library.at("simple_shader");
+            auto shader = shader_library.at("rainbow");
             
             shader->use(); 
             
