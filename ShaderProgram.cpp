@@ -81,6 +81,16 @@ void ShaderProgram::setUniform(const std::string& name, const glm::mat3 & val) {
 	glProgramUniformMatrix3fv(ID, loc, 1, GL_FALSE, glm::value_ptr(val));
 }
 
+void ShaderProgram::setUniform(const std::string& name, const glm::mat4 & val) {
+    auto loc = getUniformLocation(name);
+	glProgramUniformMatrix4fv(ID, loc, 1, GL_FALSE, glm::value_ptr(val));
+}
+
+void ShaderProgram::setUniform(const std::string& name, const GLint val) {
+    auto loc = getUniformLocation(name);
+    glProgramUniform1i(ID, loc, val);
+}
+
 void ShaderProgram::setUniform(const std::string & name, const std::vector<GLint>& val) {
     auto loc = getUniformLocation(name);
     glProgramUniform1iv(ID, loc, val.size(), reinterpret_cast<GLint const*>(val.data()));

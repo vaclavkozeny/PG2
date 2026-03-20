@@ -20,17 +20,21 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 			break;
 		case GLFW_KEY_V:
-			// Vsync on/off
-			this_inst->vsync = !this_inst->vsync;
-			glfwSwapInterval(this_inst->vsync);
-			std::cout << "VSync: " << this_inst->vsync << "\n";
+			if (action == GLFW_PRESS) {  // Only toggle on press
+				// Vsync on/off
+				this_inst->vsync = !this_inst->vsync;
+				glfwSwapInterval(this_inst->vsync);
+				std::cout << "VSync: " << (this_inst->vsync ? "ON" : "OFF") << "\n";
+			}
 			break;
 		case GLFW_KEY_D:
 			this_inst->show_imgui = !this_inst->show_imgui;
 			break;
 		case GLFW_KEY_F:
-            this_inst->toggle_fullscreen(window);
-            break;
+			if (action == GLFW_PRESS) {  // Only toggle on press
+				this_inst->toggle_fullscreen(window);
+			}
+			break;
 		default:
 			break;
 		}
@@ -38,12 +42,23 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
 }
 
 void App::glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    if (yoffset > 0.0) {
-        std::cout << "wheel up...\n";
-    }
+    auto this_inst = static_cast<App*>(glfwGetWindowUserPointer(window));
+    
+    // Change FOV with mouse wheel  
+    this_inst->fov += yoffset * 5.0f;
+    this_inst->fov = std::clamp(this_inst->fov, 20.0f, 170.0f);
+    this_inst->update_projection_matrix();
+    
+    std::cout << "FOV: " << this_inst->fov << "°\n";
 }
 
 void App::glfw_framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    auto this_inst = static_cast<App*>(glfwGetWindowUserPointer(window));
+    this_inst->width = width;
+    this_inst->height = height;
+    
+    glViewport(0, 0, width, height);
+    this_inst->update_projection_matrix();
 }
 
 void App::glfw_mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
@@ -69,4 +84,19 @@ void App::glfw_mouse_button_callback(GLFWwindow* window, int button, int action,
 			break;
 		}
 	}
+}
+
+void App::glfw_cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
+    auto this_inst = static_cast<App*>(glfwGetWindowUserPointer(window));
+    
+    // Calculate offset
+    double xoffset = xpos - this_inst->cursorLastX;
+    double yoffset = this_inst->cursorLastY - ypos;  // Reversed: y increases downward in pixel space
+    
+    // Update last position
+    this_inst->cursorLastX = xpos;
+    this_inst->cursorLastY = ypos;
+    
+    // Process mouse movement for camera
+    this_inst->camera.ProcessMouseMovement(static_cast<GLfloat>(xoffset), static_cast<GLfloat>(yoffset));
 }

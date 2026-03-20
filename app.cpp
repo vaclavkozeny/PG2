@@ -79,6 +79,7 @@ void App::initOpenGL() {
 	glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
 	glfwSetKeyCallback(window, glfw_key_callback);
 	glfwSetScrollCallback(window, glfw_scroll_callback);
+	glfwSetCursorPosCallback(window, glfw_cursor_position_callback);
 
     glewExperimental = GL_TRUE;
     glewInit();
@@ -100,6 +101,10 @@ bool App::init()
     try {
         // GL init
         initOpenGL();
+            
+        // Enable depth testing
+        glEnable(GL_DEPTH_TEST);
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);  // Dark gray background
             
         if (GLEW_ARB_debug_output)
         {
@@ -129,6 +134,19 @@ bool App::init()
 		init_assets();
 
 		init_imgui();
+        
+        // Get window dimensions and set up initial camera position
+        glfwGetFramebufferSize(window, &width, &height);
+        if (height <= 0) height = 1;
+        
+        // Initialize projection matrix
+        update_projection_matrix();
+        
+        // Get initial cursor position
+        glfwGetCursorPos(window, &cursorLastX, &cursorLastY);
+        
+        // Initialize camera - constructor already calls updateCameraVectors
+        camera.Position = glm::vec3(0.0f, 0.0f, 2.0f);
 
 		glfwShowWindow(window);
     }
@@ -168,9 +186,12 @@ void App::init_assets(void) {
         try {
             model = std::make_shared<Model>(
                 std::filesystem::path(model_path),
-                shader_library.at("rainbow")
+                shader_library.at("simple_shader")
             );
             std::cout << "✓ Successfully loaded: " << model_path << "\n";
+            // Bunny is ~52x40x50 units centered at (-3.5, -3.2, 21).
+            model->setScale(glm::vec3(10.0f));
+            model->setPosition(glm::vec3(0.035f, 0.032f, -0.211f));
             model_loaded = true;
             break;
         }
@@ -217,7 +238,12 @@ int App::run(void)
 
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
+            
+            // Calculate delta time
             double currentTime = glfwGetTime();
+            double deltaTime = currentTime - last_frame_time;
+            last_frame_time = currentTime;
+            
             frameCount++;
 
             // 2. Start ImGui Frame
@@ -230,10 +256,11 @@ int App::run(void)
                 ImGui::Begin("Performance");
                 ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
                 ImGui::Text("Frame time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+                ImGui::Text("Camera Pos: (%.1f, %.1f, %.1f)", camera.Position.x, camera.Position.y, camera.Position.z);
                 ImGui::End();
             }
 
-            // update every second
+            // update title every second
             if (currentTime - lastTime >= 1.0)
             {
                 double fps = frameCount / (currentTime - lastTime);
@@ -244,16 +271,29 @@ int App::run(void)
                 frameCount = 0;
                 lastTime = currentTime;
             }
-
-            // nejde to dopici
-            // uniform vec3 ve frag shaderu
            
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            // Process camera input
+            glm::vec3 camera_movement = camera.ProcessInput(window, static_cast<GLfloat>(deltaTime));
+            camera.Position += camera_movement;
+
+            // Create view matrix from camera
+            glm::mat4 view_matrix = camera.GetViewMatrix();
 
             if (model) {
                 for (auto const& mesh_pkg : model->meshes) {
                     mesh_pkg.shader->use();
+                    
+                    // Set transformation matrices
+                    mesh_pkg.shader->setUniform("uP_m", projection_matrix);
+                    mesh_pkg.shader->setUniform("uV_m", view_matrix);
+                    glm::mat4 mesh_local = Model::createModelMatrix(mesh_pkg.origin, mesh_pkg.eulerAngles, mesh_pkg.scale);
+                    mesh_pkg.shader->setUniform("uM_m", model->getModelMatrix() * mesh_local);
+                    
+                    // Set time uniform for effects
                     mesh_pkg.shader->setUniform("iTime", static_cast<GLfloat>(glfwGetTime()));
+                    
                     mesh_pkg.mesh->draw();
                 }
             }
@@ -278,6 +318,22 @@ int App::run(void)
     
     std::cout << "Finished OK...\n";
     return EXIT_SUCCESS;
+}
+
+// === Transformation-related methods ===
+
+void App::update_projection_matrix(void) {
+    if (height < 1)
+        height = 1;  // avoid division by 0
+
+    float ratio = static_cast<float>(width) / height;
+
+    projection_matrix = glm::perspective(
+        glm::radians(fov),   // The vertical Field of View
+        ratio,               // Aspect Ratio
+        0.1f,                // Near clipping plane
+        20000.0f             // Far clipping plane
+    );
 }
 
 // MOJE CALLBACKY

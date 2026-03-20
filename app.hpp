@@ -3,8 +3,11 @@
 #include "assets.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include "ShaderProgram.hpp"
 #include "Model.hpp"
+#include "camera.hpp"
 
 #pragma once
 
@@ -33,7 +36,7 @@ public:
     double lastTime = 0.0;
     int frameCount = 0;
 
-    bool vsync = false;
+    bool vsync = true;
 
     std::unordered_map<std::string, std::shared_ptr<ShaderProgram>> shader_library;
     std::shared_ptr<Model> model;
@@ -44,6 +47,17 @@ private:
     GLuint shader_prog_ID{ 0 };
     GLuint VBO_ID{ 0 };
     GLuint VAO_ID{ 0 };
+    
+    // === Transformation related variables ===
+    int width{800}, height{600};
+    float fov{60.0f};
+    glm::mat4 projection_matrix{glm::identity<glm::mat4>()};
+    
+    // Camera
+    Camera camera{glm::vec3(0.0f, 0.0f, 2.0f)};
+    double cursorLastX{0.0};
+    double cursorLastY{0.0};
+    double last_frame_time{0.0};
     
     std::vector<Vertex> triangle_vertices =
     {
@@ -56,11 +70,14 @@ private:
     bool show_imgui{true};
 
     void init_glfw(void);
+    
+    // === Transformation related methods ===
+    void update_projection_matrix(void);
 
     //callbacks
     static void glfw_error_callback(int error, const char* description);
     static void glfw_framebuffer_size_callback(GLFWwindow* window, int width, int height);
     static void glfw_mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
-    //static void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
+    static void glfw_cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
 };
 
