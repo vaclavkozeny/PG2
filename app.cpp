@@ -154,18 +154,33 @@ void App::init_assets(void) {
     ));
     
     //
-    // Load model from OBJ file
+    // Load model from OBJ file - Test different formats
     //
-    try {
-        model = std::make_shared<Model>(
-            std::filesystem::path("../2d_obj_samples/triangle.obj"),
-            shader_library.at("rainbow")
-        );
-        std::cout << "Model loaded successfully!\n";
+    
+    // Test models to try (in order of preference)
+    // Uncomment different models to test various OBJ formats
+    std::vector<std::string> test_models = {
+        "../obj_samples/bunny_tri_vn.obj",
+    };
+    
+    bool model_loaded = false;
+    for (const auto& model_path : test_models) {
+        try {
+            model = std::make_shared<Model>(
+                std::filesystem::path(model_path),
+                shader_library.at("rainbow")
+            );
+            std::cout << "✓ Successfully loaded: " << model_path << "\n";
+            model_loaded = true;
+            break;
+        }
+        catch (const std::exception& e) {
+            std::cerr << "  Could not load " << model_path << "\n";
+        }
     }
-    catch (const std::exception& e) {
-        std::cerr << "Failed to load model: " << e.what() << std::endl;
-        // Fallback: use hardcoded triangle if OBJ loading fails
+    
+    if (!model_loaded) {
+        std::cerr << "All test models failed, using hardcoded fallback\n";
         std::vector<Vertex> fallback_verts = {
             {glm::vec3(0.0f,  0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)},
             {glm::vec3(0.5f, -0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)},
@@ -174,7 +189,7 @@ void App::init_assets(void) {
         auto fallback_mesh = std::make_shared<Mesh>(fallback_verts, GL_TRIANGLES);
         model = std::make_shared<Model>();
         model->meshes.push_back({fallback_mesh, shader_library.at("rainbow"), glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(1.0f)});
-        std::cout << "Using fallback hardcoded triangle\n";
+        std::cout << "✓ Using hardcoded triangle (last resort)\n";
     }
 
     std::cout << "Assets initialized...\n";
@@ -319,46 +334,6 @@ App::~App()
     // clean-up
     cv::destroyAllWindows();
     std::cout << "Bye...\n";
-}
-
-
-void App::init_glfw(void)
-{
-
-	/* Initialize the library */
-	glfwSetErrorCallback(glfw_error_callback);
-
-	if (!glfwInit()) {
-		throw std::runtime_error("GLFW can not be initialized.");
-	}
-
-	// try to open OpenGL
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-	// open window, but hidden - it will be enabled later, after asset initialization
-	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-
-	/* Create a windowed mode window and its OpenGL context */
-	window = glfwCreateWindow(800, 600, "ICP", nullptr, nullptr);
-	if (!window) {
-		throw std::runtime_error("GLFW window can not be created.");
-	}
-
-	glfwSetWindowUserPointer(window, this);
-
-	/* Make the window's context current */
-	glfwMakeContextCurrent(window);
-
-	// disable mouse cursor
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-	// GLFW callbacks registration
-	glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
-	glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
-	glfwSetKeyCallback(window, glfw_key_callback);
-	glfwSetScrollCallback(window, glfw_scroll_callback);
 }
 
 void App::toggle_fullscreen(GLFWwindow* window) {
