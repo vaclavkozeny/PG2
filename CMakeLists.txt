@@ -34,6 +34,8 @@ set(PROJECT_SOURCES
     Mesh.hpp
     OBJloader.cpp
     OBJloader.hpp
+    meshgen.cpp
+    Model.hpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})

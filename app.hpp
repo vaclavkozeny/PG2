@@ -43,7 +43,7 @@ private:
     GLuint VBO_ID{ 0 };
     GLuint VAO_ID{ 0 };
     
-    std::vector<vertex> triangle_vertices =
+    std::vector<Vertex> triangle_vertices =
     {
     	{{0.0f,  0.5f,  0.0f}},
     	{{0.5f, -0.5f,  0.0f}},

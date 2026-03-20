@@ -166,7 +166,7 @@ void App::init_assets(void) {
     // 2. VBO - Samotná data (souřadnice bodů)
     glGenBuffers(1, &VBO_ID);
     glBindBuffer(GL_ARRAY_BUFFER, VBO_ID);
-    glBufferData(GL_ARRAY_BUFFER, triangle_vertices.size() * sizeof(vertex), triangle_vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, triangle_vertices.size() * sizeof(Vertex), triangle_vertices.data(), GL_STATIC_DRAW);
 
     // 3. Propojení dat z VBO do Shaderu
     // Hledáme, kde v shaderu je proměnná "attribute_Position"
@@ -181,8 +181,8 @@ void App::init_assets(void) {
         glVertexAttribPointer(
             position_attrib_location, 
             3, GL_FLOAT, GL_FALSE, 
-            sizeof(vertex), 
-            (void*)offsetof(vertex, position)
+            sizeof(Vertex), 
+            (void*)offsetof(Vertex, position)
         );
     }
 
