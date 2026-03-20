@@ -152,46 +152,32 @@ void App::init_assets(void) {
         std::filesystem::path("./basic.vert"), 
         std::filesystem::path("./GL_rainbow.frag")
     ));
-    //shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>("basic.vert","basic.frag"));
-    //shader_library.emplace("rainbow", std::make_shared<ShaderProgram>("basic.vert","GL_rainbow.frag"));
-
-    // 
-    // Create and load data into GPU - "Old-school" Bind-to-Edit styl (Mac kompatibilní)
-    //
     
-    // 1. VAO - Kontejner pro nastavení atributů
-    glGenVertexArrays(1, &VAO_ID);
-    glBindVertexArray(VAO_ID);
-
-    // 2. VBO - Samotná data (souřadnice bodů)
-    glGenBuffers(1, &VBO_ID);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_ID);
-    glBufferData(GL_ARRAY_BUFFER, triangle_vertices.size() * sizeof(Vertex), triangle_vertices.data(), GL_STATIC_DRAW);
-
-    // 3. Propojení dat z VBO do Shaderu
-    // Hledáme, kde v shaderu je proměnná "attribute_Position"
-    // Místo shader_prog_ID použij ID z knihovny
-
-    auto shader = shader_library.at("rainbow");
-    // Musí se jmenovat "aPos" jako ve vert souboru!
-    GLint position_attrib_location = shader->getAttribLocation("aPos"); 
-
-    if (position_attrib_location != -1) {
-        glEnableVertexAttribArray(position_attrib_location);
-        glVertexAttribPointer(
-            position_attrib_location, 
-            3, GL_FLOAT, GL_FALSE, 
-            sizeof(Vertex), 
-            (void*)offsetof(Vertex, position)
+    //
+    // Load model from OBJ file
+    //
+    try {
+        model = std::make_shared<Model>(
+            std::filesystem::path("../2d_obj_samples/triangle.obj"),
+            shader_library.at("rainbow")
         );
+        std::cout << "Model loaded successfully!\n";
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Failed to load model: " << e.what() << std::endl;
+        // Fallback: use hardcoded triangle if OBJ loading fails
+        std::vector<Vertex> fallback_verts = {
+            {glm::vec3(0.0f,  0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)},
+            {glm::vec3(0.5f, -0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)},
+            {glm::vec3(-0.5f, -0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)}
+        };
+        auto fallback_mesh = std::make_shared<Mesh>(fallback_verts, GL_TRIANGLES);
+        model = std::make_shared<Model>();
+        model->meshes.push_back({fallback_mesh, shader_library.at("rainbow"), glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(1.0f)});
+        std::cout << "Using fallback hardcoded triangle\n";
     }
 
-    // 4. Cleanup bindů - aby se další operace omylem nepropsaly sem
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    // Všechna volání glCreateVertexArrays, glNamedBufferData atd. musí pryč!
-    std::cout << "Assets initialized (Non-DSA mode for Mac)...\n";
+    std::cout << "Assets initialized...\n";
 }
 
 int App::run(void)
@@ -249,14 +235,13 @@ int App::run(void)
            
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            auto shader = shader_library.at("rainbow");
-            
-            shader->use(); 
-            
-            shader->setUniform("color", glm::vec3(triangle_r, 1.0, b)); 
-
-            glBindVertexArray(VAO_ID);
-            glDrawArrays(GL_TRIANGLES, 0, triangle_vertices.size());
+            if (model) {
+                for (auto const& mesh_pkg : model->meshes) {
+                    mesh_pkg.shader->use();
+                    mesh_pkg.shader->setUniform("iTime", static_cast<GLfloat>(glfwGetTime()));
+                    mesh_pkg.mesh->draw();
+                }
+            }
             
             if (FPS.is_updated()) // display new value only once per interval (default = 1.0s)
 			std::cout << "FPS: " << FPS.get() << std::endl;

@@ -11,6 +11,7 @@
 #include "assets.hpp"
 #include "Mesh.hpp"
 #include "ShaderProgram.hpp"
+#include "OBJloader.hpp"
 
 class Model {
 public:
@@ -27,10 +28,12 @@ public:
         glm::vec3 origin;                   // mesh origin relative to origin of the whole model
         glm::vec3 eulerAngles;              // mesh rotation relative to orientation of the whole model
         glm::vec3 scale;                    // mesh scale relative to scale of the whole model
-    }    
+    };    
     std::vector<mesh_package> meshes;
     
     Model() = default;
+    
+    // Load model from OBJ file
     Model(const std::filesystem::path & filename, std::shared_ptr<ShaderProgram> shader) {
         // Load mesh (all meshes) of the model, (in the future: load material of each mesh, load textures...)
         // notice: you can load multiple meshes and place them to proper positions, 
@@ -39,15 +42,25 @@ public:
         // This can be done by extending OBJ file parser (OBJ can load hierarchical models),
         // or by your own JSON model specification (or keep it simple and set a rule: 1model=1mesh ...) 
         //
+        
+        std::vector<Vertex> vertices;
+        std::vector<GLuint> indices;
+        
+        if (loadOBJ(filename, vertices, indices)) {
+            auto mesh = std::make_shared<Mesh>(vertices, indices, GL_TRIANGLES);
+            meshes.emplace_back(mesh, shader, glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
+        } else {
+            throw std::runtime_error("Failed to load OBJ file: " + filename.string());
+        }
     }
 
     void addMesh(std::shared_ptr<Mesh> mesh,
-                 std::shared_ptr<Shader> shader, 
-                 glm::vec3 origin = glm::vec3(0.0f),      // dafault value
-                 glm::vec3 eulerAngles = glm::vec3(0.0f), // dafault value
-                 glm::vec3 scale = glm::vec3(1.0f),       // dafault value
+                 std::shared_ptr<ShaderProgram> shader, 
+                 glm::vec3 origin = glm::vec3(0.0f),      // default value
+                 glm::vec3 eulerAngles = glm::vec3(0.0f), // default value
+                 glm::vec3 scale = glm::vec3(1.0f)        // default value
                  ) {
-        meshes.emplace_back(mesh,shader,origin,eulerAngles,scale);
+        meshes.emplace_back(mesh, shader, origin, eulerAngles, scale);
     }
 
     // update based on running time
@@ -61,7 +74,7 @@ public:
         // call draw() on mesh (all meshes)
         for (auto const& mesh_pkg : meshes) {
             mesh_pkg.shader->use(); // select proper shader
-            mesh_pkg.mesh.draw();   // draw mesh
+            mesh_pkg.mesh->draw();   // draw mesh
         }
     }
 };

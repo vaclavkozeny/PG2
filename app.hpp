@@ -4,6 +4,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include "ShaderProgram.hpp"
+#include "Model.hpp"
 
 #pragma once
 
@@ -35,6 +36,7 @@ public:
     bool vsync = false;
 
     std::unordered_map<std::string, std::shared_ptr<ShaderProgram>> shader_library;
+    std::shared_ptr<Model> model;
 
     ~App();
 private:
@@ -45,9 +47,9 @@ private:
     
     std::vector<Vertex> triangle_vertices =
     {
-    	{{0.0f,  0.5f,  0.0f}},
-    	{{0.5f, -0.5f,  0.0f}},
-    	{{-0.5f, -0.5f,  0.0f}}
+    	{{0.0f,  0.5f,  0.0f}, glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)},
+    	{{0.5f, -0.5f,  0.0f}, glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)},
+    	{{-0.5f, -0.5f,  0.0f}, glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)}
     };
     
     // should be ImGUI window displayed?
