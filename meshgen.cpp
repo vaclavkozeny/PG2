@@ -1,22 +1,25 @@
-struct vertex {
-    glm::vec3 position;
-};
+#include <vector>
+#include <cmath>
+#include <GL/glew.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
+#include "Mesh.hpp"
 
 // Created by JJ, based on https://www.cs.umd.edu/gvil/papers/av_ts.pdf
 // Unit cube
 Mesh generateCube() {
-    std::vector<vertex> V{
-        {{1, 1, 0}}, // [00]
-        {{0, 1, 0}}, // [01]
-        {{1, 1, 1}}, // [02]
-        {{0, 1, 1}}, // [03]
-        {{1, 0, 0}}, // [04]
-        {{0, 0, 0}}, // [05]
-        {{0, 0, 1}}, // [06]
-        {{1, 0, 1}}, // [07]
+    std::vector<Vertex> V{
+        {glm::vec3(1, 1, 0), glm::vec3(0), glm::vec2(0)}, // [00]
+        {glm::vec3(0, 1, 0), glm::vec3(0), glm::vec2(0)}, // [01]
+        {glm::vec3(1, 1, 1), glm::vec3(0), glm::vec2(0)}, // [02]
+        {glm::vec3(0, 1, 1), glm::vec3(0), glm::vec2(0)}, // [03]
+        {glm::vec3(1, 0, 0), glm::vec3(0), glm::vec2(0)}, // [04]
+        {glm::vec3(0, 0, 0), glm::vec3(0), glm::vec2(0)}, // [05]
+        {glm::vec3(0, 0, 1), glm::vec3(0), glm::vec2(0)}, // [06]
+        {glm::vec3(1, 0, 1), glm::vec3(0), glm::vec2(0)}, // [07]
     };
     
-    std::vector<uint> I{0, 1, 4, 5, 6, 1, 3, 0, 2, 4, 7, 6, 2, 3};
+    std::vector<unsigned int> I{0, 1, 4, 5, 6, 1, 3, 0, 2, 4, 7, 6, 2, 3};
         
     return Mesh(V, I, GL_TRIANGLE_STRIP);
 }
@@ -32,8 +35,8 @@ Mesh generateCube() {
  */
   
 Mesh generateSphere(unsigned int sectors, unsigned int rings) {
-    std::vector<vertex> V{};
-    std::vector<uint> I{};
+    std::vector<Vertex> V{};
+    std::vector<unsigned int> I{};
     
     // Ensure the number of sectors wraps around nicely
     unsigned int totalSectors = sectors + 1;
@@ -53,7 +56,7 @@ Mesh generateSphere(unsigned int sectors, unsigned int rings) {
             float const x = std::cos(theta) * xz_radius;
             float const z = std::sin(theta) * xz_radius;
 
-            V.push_back({glm::vec3(x, y, z)});
+            V.push_back({glm::vec3(x, y, z), glm::vec3(0), glm::vec2(0)});
         }
     }
 
