@@ -16,6 +16,7 @@
 #include "Mesh.hpp"
 #include "ShaderProgram.hpp"
 #include "OBJloader.hpp"
+#include "Texture.hpp"
 
 class Model {
 public:
@@ -26,13 +27,14 @@ public:
 
     // mesh related data
     struct mesh_package {
-        std::shared_ptr<Mesh> mesh;         // geometry & topology, vertex attributes
-        std::shared_ptr<ShaderProgram> shader;     // which shader to use to draw this part of the model
-        
-        glm::vec3 origin;                   // mesh origin relative to origin of the whole model
-        glm::vec3 eulerAngles;              // mesh rotation relative to orientation of the whole model
-        glm::vec3 scale;                    // mesh scale relative to scale of the whole model
-    };    
+        std::shared_ptr<Mesh> mesh;
+        std::shared_ptr<ShaderProgram> shader;
+        std::shared_ptr<Texture> texture{nullptr}; // nullptr = no texture
+
+        glm::vec3 origin;
+        glm::vec3 eulerAngles;
+        glm::vec3 scale;
+    };
     std::vector<mesh_package> meshes;
     
     // Cache model matrix (updated only when needed)
@@ -56,7 +58,7 @@ public:
         
         if (loadOBJ(filename, vertices, indices)) {
             auto mesh = std::make_shared<Mesh>(vertices, indices, GL_TRIANGLES);
-            meshes.emplace_back(mesh, shader, glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
+            meshes.emplace_back(mesh, shader, nullptr, glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
             // Set default scale for the entire model
             scale = glm::vec3(1.0f);
             pivot_position = glm::vec3(0.0f);
@@ -155,12 +157,12 @@ public:
     // === Mesh management ===
 
     void addMesh(std::shared_ptr<Mesh> mesh,
-                 std::shared_ptr<ShaderProgram> shader, 
-                 glm::vec3 origin = glm::vec3(0.0f),      // default value
-                 glm::vec3 eulerAngles = glm::vec3(0.0f), // default value
-                 glm::vec3 scale = glm::vec3(1.0f)        // default value
-                 ) {
-        meshes.emplace_back(mesh, shader, origin, eulerAngles, scale);
+                 std::shared_ptr<ShaderProgram> shader,
+                 std::shared_ptr<Texture> texture = nullptr,
+                 glm::vec3 origin = glm::vec3(0.0f),
+                 glm::vec3 eulerAngles = glm::vec3(0.0f),
+                 glm::vec3 scale = glm::vec3(1.0f)) {
+        meshes.emplace_back(mesh, shader, texture, origin, eulerAngles, scale);
     }
 
     // update based on running time

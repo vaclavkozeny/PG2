@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "ShaderProgram.hpp"
 #include "Model.hpp"
+#include "Texture.hpp"
 #include "camera.hpp"
 
 #pragma once
@@ -39,7 +40,9 @@ public:
     bool vsync = true;
 
     std::unordered_map<std::string, std::shared_ptr<ShaderProgram>> shader_library;
+    std::unordered_map<std::string, std::shared_ptr<Texture>> texture_library;
     std::shared_ptr<Model> model;
+    std::shared_ptr<Model> textured_model;
 
     ~App();
 private:

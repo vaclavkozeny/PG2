@@ -161,58 +161,63 @@ bool App::init()
 
 void App::init_assets(void) {
     //
-    // Initialize pipeline: compile, link and use shaders
+    // Shaders
     //
     shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>(
-        std::filesystem::path("./basic.vert"), 
+        std::filesystem::path("./basic.vert"),
         std::filesystem::path("./basic.frag")
     ));
     shader_library.emplace("rainbow", std::make_shared<ShaderProgram>(
-        std::filesystem::path("./basic.vert"), 
+        std::filesystem::path("./basic.vert"),
         std::filesystem::path("./GL_rainbow.frag")
     ));
-    
+    shader_library.emplace("texture_shader", std::make_shared<ShaderProgram>(
+        std::filesystem::path("./tex.vert"),
+        std::filesystem::path("./tex.frag")
+    ));
+
     //
-    // Load model from OBJ file - Test different formats
+    // Textures
     //
-    
-    // Test models to try (in order of preference)
-    // Uncomment different models to test various OBJ formats
-    std::vector<std::string> test_models = {
-        "../obj_samples/teapot_tri_vnt.obj",
-    };
-    
-    bool model_loaded = false;
-    for (const auto& model_path : test_models) {
-        try {
-            model = std::make_shared<Model>(
-                std::filesystem::path(model_path),
-                shader_library.at("simple_shader")
-            );
-            std::cout << "✓ Successfully loaded: " << model_path << "\n";
-            // Bunny is ~52x40x50 units centered at (-3.5, -3.2, 21).
-            // setPosition = -scale * center  so the bunny ends up at world origin
-            model->setScale(glm::vec3(0.05f));
-            model->setPosition(glm::vec3(0.175f, 0.16f, -1.05f));
-            model_loaded = true;
-            break;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "  Could not load " << model_path << "\n";
-        }
+    texture_library.emplace("box",
+        std::make_shared<Texture>(std::filesystem::path("../resources/textures/box.png")));
+    texture_library.emplace("tex256",
+        std::make_shared<Texture>(std::filesystem::path("../resources/textures/tex_256.png")));
+
+    //
+    // Untextured model: bunny (simple flat-color shader)
+    //
+    try {
+        model = std::make_shared<Model>(
+            std::filesystem::path("../obj_samples/bunny_tri_vn.obj"),
+            shader_library.at("simple_shader")
+        );
+        // Bunny centroid is at (-3.47, -3.20, 21.06). setPosition = -scale * centroid
+        model->setScale(glm::vec3(0.05f));
+        model->setPosition(glm::vec3(0.175f, 0.16f, -1.05f));
+        std::cout << "✓ Loaded bunny\n";
     }
-    
-    if (!model_loaded) {
-        std::cerr << "All test models failed, using hardcoded fallback\n";
-        std::vector<Vertex> fallback_verts = {
-            {glm::vec3(0.0f,  0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)},
-            {glm::vec3(0.5f, -0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)},
-            {glm::vec3(-0.5f, -0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec2(0.0f)}
-        };
-        auto fallback_mesh = std::make_shared<Mesh>(fallback_verts, GL_TRIANGLES);
-        model = std::make_shared<Model>();
-        model->meshes.push_back({fallback_mesh, shader_library.at("rainbow"), glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(1.0f)});
-        std::cout << "✓ Using hardcoded triangle (last resort)\n";
+    catch (const std::exception& e) {
+        std::cerr << "Could not load bunny: " << e.what() << "\n";
+    }
+
+    //
+    // Textured model: sphere (texture shader + box texture)
+    //
+    try {
+        textured_model = std::make_shared<Model>(
+            std::filesystem::path("../obj_samples/sphere_tri_vnt.obj"),
+            shader_library.at("texture_shader")
+        );
+        // Sphere is unit-sized (~radius 1), centered at origin — no position fix needed
+        textured_model->setScale(glm::vec3(1.5f));
+        textured_model->setPosition(glm::vec3(3.5f, 0.0f, 0.0f));
+        // Attach texture to the mesh
+        textured_model->meshes[0].texture = texture_library.at("box");
+        std::cout << "✓ Loaded textured sphere\n";
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Could not load textured sphere: " << e.what() << "\n";
     }
 
     std::cout << "Assets initialized...\n";
@@ -283,22 +288,28 @@ int App::run(void)
             // Create view matrix from camera
             glm::mat4 view_matrix = camera.GetViewMatrix();
 
-            if (model) {
-                for (auto const& mesh_pkg : model->meshes) {
+            // Helper lambda to draw one model (handles textures automatically)
+            auto draw_model = [&](std::shared_ptr<Model>& mdl) {
+                if (!mdl) return;
+                for (auto const& mesh_pkg : mdl->meshes) {
                     mesh_pkg.shader->use();
-                    
-                    // Set transformation matrices
                     mesh_pkg.shader->setUniform("uP_m", projection_matrix);
                     mesh_pkg.shader->setUniform("uV_m", view_matrix);
-                    glm::mat4 mesh_local = Model::createModelMatrix(mesh_pkg.origin, mesh_pkg.eulerAngles, mesh_pkg.scale);
-                    mesh_pkg.shader->setUniform("uM_m", model->getModelMatrix() * mesh_local);
-                    
-                    // Set time uniform for effects (only used by rainbow shader)
-                    //mesh_pkg.shader->setUniform("iTime", static_cast<GLfloat>(glfwGetTime()));
-                    
+                    glm::mat4 mesh_local = Model::createModelMatrix(
+                        mesh_pkg.origin, mesh_pkg.eulerAngles, mesh_pkg.scale);
+                    mesh_pkg.shader->setUniform("uM_m", mdl->getModelMatrix() * mesh_local);
+
+                    if (mesh_pkg.texture) {
+                        mesh_pkg.texture->bind(0);         // bind to texture unit 0
+                        mesh_pkg.shader->setUniform("tex0", 0); // tell sampler which unit
+                    }
+
                     mesh_pkg.mesh->draw();
                 }
-            }
+            };
+
+            draw_model(model);
+            draw_model(textured_model);
             
             if (FPS.is_updated()) // display new value only once per interval (default = 1.0s)
 			std::cout << "FPS: " << FPS.get() << std::endl;

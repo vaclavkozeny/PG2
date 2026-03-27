@@ -36,6 +36,8 @@ set(PROJECT_SOURCES
     OBJloader.hpp
     meshgen.cpp
     Model.hpp
+    Texture.cpp
+    Texture.hpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
@@ -60,6 +62,11 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         ${CMAKE_SOURCE_DIR}/basic.vert
         ${CMAKE_SOURCE_DIR}/basic.frag
         ${CMAKE_SOURCE_DIR}/GL_rainbow.frag
+        ${CMAKE_SOURCE_DIR}/tex.vert
+        ${CMAKE_SOURCE_DIR}/tex.frag
         $<TARGET_FILE_DIR:${PROJECT_NAME}>
     COMMENT "Copying shaders to build directory"
 )
+
+# Note: textures live in <project_root>/resources/textures/ and are loaded
+# via the relative path "../resources/textures/" from the build directory.
