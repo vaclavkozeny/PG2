@@ -2,3 +2,6 @@ vcpkg/
 build/
 *.json
 .DS_STORE
+
+
+07lab - tex/
