@@ -41,9 +41,8 @@ public:
     
     
 private:
-    GLuint ID{0}; // default = 0, empty shader
-    inline static GLuint currently_used{0};
-    inline static GLuint currently_used_ID{0}; // Fixed naming consistency
+    GLuint ID{0};
+    inline static GLuint currently_used_ID{0};
     std::unordered_map<std::string, GLuint> uniform_location_cache;
 
     GLuint getUniformLocation(const std::string & name);

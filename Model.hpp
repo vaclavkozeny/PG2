@@ -172,19 +172,5 @@ public:
         //       use lambda funtion, call scripting language, etc. 
     }
     
-    // === Drawing ===
-    
-    void draw() {
-        // call draw() on mesh (all meshes)
-        for (auto const& mesh_pkg : meshes) {
-            mesh_pkg.shader->use(); // select proper shader
-            
-            // Calculate and set model matrix
-            glm::mat4 mesh_model_matrix = createModelMatrix(mesh_pkg.origin, mesh_pkg.eulerAngles, mesh_pkg.scale);        
-            mesh_pkg.shader->setUniform("uM_m", mesh_model_matrix * local_model_matrix);
-            
-            mesh_pkg.mesh->draw();   // draw mesh
-        }
-    }
 };
 

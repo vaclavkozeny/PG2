@@ -1,165 +1,135 @@
-// icp.cpp 
-// author: JJ
-
-// C++
-// include anywhere, in any order
+// app.cpp
 #include <iostream>
 #include <chrono>
-#include <stack>
-#include <random>
+#include <string>
 
-// OpenCV (does not depend on GL)
 #include <opencv4/opencv2/opencv.hpp>
 
-// OpenGL Extension Wrangler: allow all multiplatform GL functions
-#include <GL/glew.h> 
-// WGLEW = Windows GL Extension Wrangler (change for different platform) 
-// platform specific functions (in this case Windows)
-// #include <GL/wglew.h> 
-
-// GLFW toolkit
-// Uses GL calls to open GL context, i.e. GLEW __MUST__ be first.
+#include <GL/glew.h>
 #include <GLFW/glfw3.h>
-
-// OpenGL math (and other additional GL libraries, at the end)
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "assets.hpp"
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 
-// ImGUI headers
-#include <imgui.h>               // main ImGUI header
-#include <imgui_impl_glfw.h>     // GLFW bindings
-#include <imgui_impl_opengl3.h>  // OpenGL bindings
-
+#include "app.hpp"
+#include "gl_err_callback.h"
 #include "fps_meter.hpp"
 
-//---------------------------------------------------------------------
-#include "app.hpp"
+// --------------------------------------------------------------------------
+// Constructor / Destructor
+// --------------------------------------------------------------------------
 
-//#include "glerror.h"
-#include "gl_err_callback.h"
-
-App::App()
-{
-    // default constructor
-    // nothing to do here (so far...)
+App::App() {
     std::cout << "Constructed...\n";
 }
 
+App::~App() {
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
+    if (window) {
+        glfwDestroyWindow(window);
+        window = nullptr;
+    }
+    glfwTerminate();
+
+    cv::destroyAllWindows();
+    std::cout << "Bye...\n";
+}
+
+// --------------------------------------------------------------------------
+// Initialization
+// --------------------------------------------------------------------------
+
 void App::initOpenGL() {
-    /* Initialize the library */
-	glfwSetErrorCallback(glfw_error_callback);
+    glfwSetErrorCallback(glfw_error_callback);
 
-	if (!glfwInit()) {
-		throw std::runtime_error("GLFW can not be initialized.");
-	}
+    if (!glfwInit())
+        throw std::runtime_error("GLFW can not be initialized.");
 
-	// open window, but hidden - it will be enabled later, after asset initialization
-	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    // Hidden until assets are ready
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
-    // Na Macu musíme explicitně říct, že chceme Core Profile 4.1
+    // macOS requires Core Profile 4.1
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    window = glfwCreateWindow(800, 600, "OpenGL context", NULL, NULL);
-    if (!window) throw std::runtime_error("Window creation failed");
-    
-    glfwMakeContextCurrent(window);
+    window = glfwCreateWindow(800, 600, "OpenGL context", nullptr, nullptr);
+    if (!window)
+        throw std::runtime_error("Window creation failed.");
 
+    glfwMakeContextCurrent(window);
     glfwSetWindowUserPointer(window, this);
 
-    // disable mouse cursor
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // Capture cursor for free-fly camera
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-	// GLFW callbacks registration
-	glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
-	glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
-	glfwSetKeyCallback(window, glfw_key_callback);
-	glfwSetScrollCallback(window, glfw_scroll_callback);
-	glfwSetCursorPosCallback(window, glfw_cursor_position_callback);
+    // Register callbacks
+    glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
+    glfwSetMouseButtonCallback(window,     glfw_mouse_button_callback);
+    glfwSetKeyCallback(window,             glfw_key_callback);
+    glfwSetScrollCallback(window,          glfw_scroll_callback);
+    glfwSetCursorPosCallback(window,       glfw_cursor_position_callback);
 
     glewExperimental = GL_TRUE;
     glewInit();
 }
 
-void App::init_imgui()
-{
-	// see https://github.com/ocornut/imgui/wiki/Getting-Started
-	
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
-	ImGui_ImplOpenGL3_Init();
-	std::cout << "ImGUI version: " << ImGui::GetVersion() << "\n";
+void App::init_imgui() {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init();
+    std::cout << "ImGUI version: " << ImGui::GetVersion() << "\n";
 }
 
-bool App::init()
-{
+bool App::init() {
     try {
-        // GL init
         initOpenGL();
-            
-        // Enable depth testing
+
         glEnable(GL_DEPTH_TEST);
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);  // Dark gray background
-            
-        if (GLEW_ARB_debug_output)
-        {
-            glDebugMessageCallback(MessageCallback, 0);
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+
+        if (GLEW_ARB_debug_output) {
+            glDebugMessageCallback(MessageCallback, nullptr);
             glEnable(GL_DEBUG_OUTPUT);
-            
-            //default is asynchronous debug output, use this to simulate glGetError() functionality
-            //glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-            
-            std::cout << "GL_DEBUG enabled." << std::endl;
+            std::cout << "GL_DEBUG enabled.\n";
+        } else {
+            std::cout << "GL_DEBUG NOT SUPPORTED!\n";
         }
-        else
-            std::cout << "GL_DEBUG NOT SUPPORTED!" << std::endl;
 
-        if (vsync)
-            glfwSwapInterval(1);
-        else
-            glfwSwapInterval(0);
-        
-        glfwSwapInterval((vsync?1:0));
+        glfwSwapInterval(vsync ? 1 : 0);
 
-        //if (!std::filesystem::exists("resources"))
-		//	throw std::runtime_error("Directory 'resources' not found. Various media files are expected to be there.");
-		
-		//init_glfw();
+        init_assets();
+        init_imgui();
 
-		init_assets();
-
-		init_imgui();
-        
-        // Get window dimensions and set up initial camera position
         glfwGetFramebufferSize(window, &width, &height);
         if (height <= 0) height = 1;
         glViewport(0, 0, width, height);
 
-        // Initialize projection matrix
         update_projection_matrix();
 
-        // Get initial cursor position
         glfwGetCursorPos(window, &cursorLastX, &cursorLastY);
 
-        // Camera at z=5 looking towards origin (bunny is at world origin)
         camera.Position = glm::vec3(0.0f, 0.5f, 5.0f);
 
-		glfwShowWindow(window);
+        glfwShowWindow(window);
     }
     catch (std::exception const& e) {
-        std::cerr << "Init failed : " << e.what() << std::endl;
+        std::cerr << "Init failed: " << e.what() << "\n";
         throw;
     }
     std::cout << "Initialized...\n";
     return true;
 }
 
-void App::init_assets(void) {
+void App::init_assets() {
     //
     // Shaders
     //
@@ -185,36 +155,33 @@ void App::init_assets(void) {
         std::make_shared<Texture>(std::filesystem::path("../resources/textures/tex_256.png")));
 
     //
-    // Untextured model: bunny (simple flat-color shader)
+    // Untextured model: bunny
     //
     try {
         model = std::make_shared<Model>(
             std::filesystem::path("../obj_samples/bunny_tri_vn.obj"),
             shader_library.at("simple_shader")
         );
-        // Bunny centroid is at (-3.47, -3.20, 21.06). setPosition = -scale * centroid
         model->setScale(glm::vec3(0.05f));
         model->setPosition(glm::vec3(0.175f, 0.16f, -1.05f));
-        std::cout << "✓ Loaded bunny\n";
+        std::cout << "Loaded bunny\n";
     }
     catch (const std::exception& e) {
         std::cerr << "Could not load bunny: " << e.what() << "\n";
     }
 
     //
-    // Textured model: sphere (texture shader + box texture)
+    // Textured model: sphere
     //
     try {
         textured_model = std::make_shared<Model>(
             std::filesystem::path("../obj_samples/sphere_tri_vnt.obj"),
             shader_library.at("texture_shader")
         );
-        // Sphere is unit-sized (~radius 1), centered at origin — no position fix needed
         textured_model->setScale(glm::vec3(1.5f));
         textured_model->setPosition(glm::vec3(3.5f, 0.0f, 0.0f));
-        // Attach texture to the mesh
         textured_model->meshes[0].texture = texture_library.at("box");
-        std::cout << "✓ Loaded textured sphere\n";
+        std::cout << "Loaded textured sphere\n";
     }
     catch (const std::exception& e) {
         std::cerr << "Could not load textured sphere: " << e.what() << "\n";
@@ -223,239 +190,153 @@ void App::init_assets(void) {
     std::cout << "Assets initialized...\n";
 }
 
-int App::run(void)
-{
+// --------------------------------------------------------------------------
+// Main loop
+// --------------------------------------------------------------------------
+
+int App::run() {
     try {
-        GLfloat r,g,b,a;
-        r=g=b=a=1.0f; //white color
-
-        // Activate shader program. There is only one program, so activation can be out of the loop. 
-        // In more realistic scenarios, you will activate different shaders for different 3D objects.
-        //glUseProgram(shader_prog_ID);
-        
-        // Get uniform location in GPU program. This will not change, so it can be moved out of the game loop.
-        //GLint uniform_color_location = glGetUniformLocation(shader_prog_ID, "uniform_Color");
-        //if (uniform_color_location == -1) {
-        //    std::cerr << "Uniform location is not found in active shader program. Did you forget to activate it?\n";
-        //}
-
-        lastTime = glfwGetTime();
+        lastTime   = glfwGetTime();
         frameCount = 0;
         fps_meter FPS;
 
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
-            
-            // Calculate delta time
+
             double currentTime = glfwGetTime();
-            double deltaTime = currentTime - last_frame_time;
-            last_frame_time = currentTime;
-            
+            double deltaTime   = currentTime - last_frame_time;
+            last_frame_time    = currentTime;
             frameCount++;
 
-            // 2. Start ImGui Frame
-            ImGui_ImplOpenGL3_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
-            ImGui::NewFrame();
+            // ImGui frame
+            if (show_imgui) {
+                ImGui_ImplOpenGL3_NewFrame();
+                ImGui_ImplGlfw_NewFrame();
+                ImGui::NewFrame();
 
-            // 3. Define the UI
-            {
                 ImGui::Begin("Performance");
-                ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+                ImGui::Text("FPS: %.1f",          ImGui::GetIO().Framerate);
                 ImGui::Text("Frame time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
-                ImGui::Text("Camera Pos: (%.1f, %.1f, %.1f)", camera.Position.x, camera.Position.y, camera.Position.z);
+                ImGui::Text("Camera: (%.1f, %.1f, %.1f)",
+                    camera.Position.x, camera.Position.y, camera.Position.z);
                 ImGui::End();
             }
 
-            // update title every second
-            if (currentTime - lastTime >= 1.0)
-            {
+            // Window title update (once per second)
+            if (currentTime - lastTime >= 1.0) {
                 double fps = frameCount / (currentTime - lastTime);
-
-                std::string title = "OpenGL context - FPS: " + std::to_string((int)fps);
-                glfwSetWindowTitle(window, title.c_str());
-
+                glfwSetWindowTitle(window,
+                    ("OpenGL context - FPS: " + std::to_string(static_cast<int>(fps))).c_str());
                 frameCount = 0;
-                lastTime = currentTime;
+                lastTime   = currentTime;
             }
-           
+
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // Process camera input
-            glm::vec3 camera_movement = camera.ProcessInput(window, static_cast<GLfloat>(deltaTime));
-            camera.Position += camera_movement;
-
-            // Create view matrix from camera
+            // Camera
+            camera.Position += camera.ProcessInput(window, static_cast<GLfloat>(deltaTime));
             glm::mat4 view_matrix = camera.GetViewMatrix();
 
-            // Helper lambda to draw one model (handles textures automatically)
+            // Draw helper — sets MVP, binds texture if present, then draws
             auto draw_model = [&](std::shared_ptr<Model>& mdl) {
                 if (!mdl) return;
-                for (auto const& mesh_pkg : mdl->meshes) {
-                    mesh_pkg.shader->use();
-                    mesh_pkg.shader->setUniform("uP_m", projection_matrix);
-                    mesh_pkg.shader->setUniform("uV_m", view_matrix);
-                    glm::mat4 mesh_local = Model::createModelMatrix(
-                        mesh_pkg.origin, mesh_pkg.eulerAngles, mesh_pkg.scale);
-                    mesh_pkg.shader->setUniform("uM_m", mdl->getModelMatrix() * mesh_local);
+                for (auto const& pkg : mdl->meshes) {
+                    pkg.shader->use();
+                    pkg.shader->setUniform("uP_m", projection_matrix);
+                    pkg.shader->setUniform("uV_m", view_matrix);
 
-                    if (mesh_pkg.texture) {
-                        mesh_pkg.texture->bind(0);         // bind to texture unit 0
-                        mesh_pkg.shader->setUniform("tex0", 0); // tell sampler which unit
+                    glm::mat4 mesh_local = Model::createModelMatrix(
+                        pkg.origin, pkg.eulerAngles, pkg.scale);
+                    pkg.shader->setUniform("uM_m", mdl->getModelMatrix() * mesh_local);
+
+                    if (pkg.texture) {
+                        pkg.texture->bind(0);
+                        pkg.shader->setUniform("tex0", 0);
                     }
 
-                    mesh_pkg.mesh->draw();
+                    pkg.mesh->draw();
                 }
             };
 
             draw_model(model);
             draw_model(textured_model);
-            
-            if (FPS.is_updated()) // display new value only once per interval (default = 1.0s)
-			std::cout << "FPS: " << FPS.get() << std::endl;
-            
-            // 5. Finalize and Render ImGui
-            ImGui::Render();
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-            // 6. Swap Buffers
+            if (FPS.is_updated())
+                std::cout << "FPS: " << FPS.get() << "\n";
+
+            // Finalize ImGui
+            if (show_imgui) {
+                ImGui::Render();
+                ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            }
+
             glfwSwapBuffers(window);
-            
             FPS.update();
         }
     }
     catch (std::exception const& e) {
-        std::cerr << "App failed : " << e.what() << std::endl;
+        std::cerr << "App failed: " << e.what() << "\n";
         return EXIT_FAILURE;
     }
-    
+
     std::cout << "Finished OK...\n";
     return EXIT_SUCCESS;
 }
 
-// === Transformation-related methods ===
+// --------------------------------------------------------------------------
+// Helpers
+// --------------------------------------------------------------------------
 
-void App::update_projection_matrix(void) {
-    if (height < 1)
-        height = 1;  // avoid division by 0
-
+void App::update_projection_matrix() {
+    if (height < 1) height = 1;
     float ratio = static_cast<float>(width) / height;
-
     projection_matrix = glm::perspective(
-        glm::radians(fov),   // The vertical Field of View
-        ratio,               // Aspect Ratio
-        0.1f,                // Near clipping plane
-        20000.0f             // Far clipping plane
+        glm::radians(fov),
+        ratio,
+        0.1f,
+        20000.0f
     );
 }
 
-// MOJE CALLBACKY
-/*
-void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    App* app = static_cast<App*>(glfwGetWindowUserPointer(window));
-
-    app->triangle_r += yoffset * 0.05f;
-
-    if (app->triangle_r > 1.0f) app->triangle_r = 1.0f;
-    if (app->triangle_r < 0.0f) app->triangle_r = 0.0f;
-}
-
-void App::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    App* app = static_cast<App*>(glfwGetWindowUserPointer(window));
-    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-		switch (key) {
-		case GLFW_KEY_ESCAPE:
-			std::cout << "ESC has been pressed!\n";
-			glfwSetWindowShouldClose(window, GLFW_TRUE);
-			break;
-        case GLFW_KEY_V:
-            app->vsync = !app->vsync;
-            glfwSwapInterval(app->vsync ? 1 : 0);
-
-            std::cout << "VSync: "
-                      << (app->vsync ? "ON" : "OFF")
-                      << std::endl;
-        default:
-            break;
-        }
-    }
-}
-*/
-
-App::~App()
-{
-    //new stuff: cleanup GL data
-    if (shader_prog_ID) glDeleteProgram(shader_prog_ID);
-    if (VBO_ID) glDeleteBuffers(1, &VBO_ID);
-    if (VAO_ID) glDeleteVertexArrays(1, &VAO_ID);
-
-    ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
-
-	// clean-up GLFW
-	if (window) {
-		glfwDestroyWindow(window);
-		window = nullptr;
-	}
-	glfwTerminate();
-
-    // clean-up
-    cv::destroyAllWindows();
-    std::cout << "Bye...\n";
-}
-
-void App::toggle_fullscreen(GLFWwindow* window) {
+void App::toggle_fullscreen(GLFWwindow* win) {
     if (isFullScreen) {
-        // --- RESTORE TO WINDOWED MODE ---
-        glfwSetWindowMonitor(window, nullptr, savedXPos, savedYPos, savedWidth, savedHeight, GLFW_DONT_CARE);
+        glfwSetWindowMonitor(win, nullptr, savedXPos, savedYPos, savedWidth, savedHeight, GLFW_DONT_CARE);
         isFullScreen = false;
     } else {
-        // --- SWITCH TO FULLSCREEN MODE ---
-        // 1. Save current window position and size
-        glfwGetWindowPos(window, &savedXPos, &savedYPos);
-        glfwGetWindowSize(window, &savedWidth, &savedHeight);
-
-        // 2. Determine which monitor the window is currently on
-        GLFWmonitor* monitor = GetCurrentMonitor(window);
-        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-
-        // 3. Switch to fullscreen on that specific monitor
-        glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+        glfwGetWindowPos(win,  &savedXPos,   &savedYPos);
+        glfwGetWindowSize(win, &savedWidth,  &savedHeight);
+        GLFWmonitor*      monitor = GetCurrentMonitor(win);
+        const GLFWvidmode* mode  = glfwGetVideoMode(monitor);
+        glfwSetWindowMonitor(win, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
         isFullScreen = true;
     }
 }
 
-GLFWmonitor* App::GetCurrentMonitor(GLFWwindow* window) {
-    // get all monitors
+GLFWmonitor* App::GetCurrentMonitor(GLFWwindow* win) {
     int monitorCount;
     GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
     if (!monitors) return glfwGetPrimaryMonitor();
 
-    //store window params
     int windowX, windowY, windowWidth, windowHeight;
-    glfwGetWindowPos(window, &windowX, &windowY);
-    glfwGetWindowSize(window, &windowWidth, &windowHeight);
+    glfwGetWindowPos(win,  &windowX,     &windowY);
+    glfwGetWindowSize(win, &windowWidth, &windowHeight);
 
-    GLFWmonitor* bestMonitor = nullptr;
-    int bestOverlapArea = 0;
+    GLFWmonitor* bestMonitor  = nullptr;
+    int          bestOverlap  = 0;
 
-    //find best overlap
     for (int i = 0; i < monitorCount; i++) {
         GLFWmonitor* monitor = monitors[i];
-        
-        int monitorX, monitorY;
-        glfwGetMonitorPos(monitor, &monitorX, &monitorY);
+        int mx, my;
+        glfwGetMonitorPos(monitor, &mx, &my);
         const GLFWvidmode* mode = glfwGetVideoMode(monitor);
         if (!mode) continue;
 
-        // Calculate the intersection (overlap) between the window and the monitor
-        int overlapX = std::max(0, std::min(windowX + windowWidth, monitorX + mode->width) - std::max(windowX, monitorX));
-        int overlapY = std::max(0, std::min(windowY + windowHeight, monitorY + mode->height) - std::max(windowY, monitorY));
-        int overlapArea = overlapX * overlapY;
+        int ox = std::max(0, std::min(windowX + windowWidth,  mx + mode->width)  - std::max(windowX, mx));
+        int oy = std::max(0, std::min(windowY + windowHeight, my + mode->height) - std::max(windowY, my));
+        int area = ox * oy;
 
-        if (overlapArea > bestOverlapArea) {
-            bestOverlapArea = overlapArea;
+        if (area > bestOverlap) {
+            bestOverlap  = area;
             bestMonitor = monitor;
         }
     }

@@ -103,7 +103,7 @@ private:
             attribute_location_texture_coords,
             2, GL_FLOAT, GL_FALSE,
             sizeof(Vertex),
-            (void*)offsetof(Vertex, texCoords)
+            (void*)offsetof(Vertex, tex_coords)
         );
 
         // Setup EBO if indices are provided

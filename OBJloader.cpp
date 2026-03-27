@@ -133,9 +133,9 @@ bool loadOBJ(const std::filesystem::path& filename, std::vector<Vertex>& vertice
 					
 					// TexCoords (use provided or default)
 					if (has_uvs && fv.uv_idx > 0) {
-						currentVertex.texCoords = temp_uvs[fv.uv_idx - 1];
+						currentVertex.tex_coords = temp_uvs[fv.uv_idx - 1];
 					} else {
-						currentVertex.texCoords = glm::vec2(0.0f, 0.0f); // default UV
+						currentVertex.tex_coords = glm::vec2(0.0f, 0.0f); // default UV
 					}
 					
 					// Avoid duplicate vertices
@@ -175,7 +175,7 @@ bool loadOBJ(const std::filesystem::path& filename, std::vector<Vertex>& vertice
 					currentVertex.position = temp_vertices[fv.vertex_idx - 1];
 					currentVertex.normal = (has_normals && fv.normal_idx > 0) ? 
 						temp_normals[fv.normal_idx - 1] : glm::vec3(0.0f, 0.0f, 1.0f);
-					currentVertex.texCoords = (has_uvs && fv.uv_idx > 0) ? 
+					currentVertex.tex_coords = (has_uvs && fv.uv_idx > 0) ? 
 						temp_uvs[fv.uv_idx - 1] : glm::vec2(0.0f, 0.0f);
 					
 					auto t = std::find_if(vertices.begin(),
@@ -202,7 +202,7 @@ bool loadOBJ(const std::filesystem::path& filename, std::vector<Vertex>& vertice
 					currentVertex.position = temp_vertices[fv.vertex_idx - 1];
 					currentVertex.normal = (has_normals && fv.normal_idx > 0) ? 
 						temp_normals[fv.normal_idx - 1] : glm::vec3(0.0f, 0.0f, 1.0f);
-					currentVertex.texCoords = (has_uvs && fv.uv_idx > 0) ? 
+					currentVertex.tex_coords = (has_uvs && fv.uv_idx > 0) ? 
 						temp_uvs[fv.uv_idx - 1] : glm::vec2(0.0f, 0.0f);
 					
 					auto t = std::find_if(vertices.begin(),

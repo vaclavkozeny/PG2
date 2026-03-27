@@ -27,8 +27,9 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
 				std::cout << "VSync: " << (this_inst->vsync ? "ON" : "OFF") << "\n";
 			}
 			break;
-		case GLFW_KEY_D:
-			this_inst->show_imgui = !this_inst->show_imgui;
+		case GLFW_KEY_I:
+			if (action == GLFW_PRESS)
+				this_inst->show_imgui = !this_inst->show_imgui;
 			break;
 		case GLFW_KEY_F:
 			if (action == GLFW_PRESS) {  // Only toggle on press
