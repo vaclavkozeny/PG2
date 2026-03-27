@@ -13,7 +13,7 @@
 #include "ShaderProgram.hpp"
 #include "Model.hpp"
 #include "Texture.hpp"
-#include "camera.hpp"
+#include "Camera.hpp"
 
 class App {
 public:

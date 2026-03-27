@@ -4,7 +4,7 @@
 #include <GL/glew.h> 
 //#include <GL/wglew.h> //WGLEW = Windows GL Extension Wrangler (change for different platform) 
 
-#include "glerror.h"
+#include "glerror.hpp"
 
 using namespace std;
 

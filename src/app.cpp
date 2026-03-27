@@ -15,7 +15,7 @@
 #include <imgui_impl_opengl3.h>
 
 #include "app.hpp"
-#include "gl_err_callback.h"
+#include "gl_err_callback.hpp"
 #include "fps_meter.hpp"
 
 // --------------------------------------------------------------------------

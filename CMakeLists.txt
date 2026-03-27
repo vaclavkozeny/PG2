@@ -11,8 +11,7 @@ find_package(glm           CONFIG REQUIRED)
 find_package(GLEW                 REQUIRED)
 find_package(glfw3         CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
-
-find_package(imgui CONFIG REQUIRED)
+find_package(imgui         CONFIG REQUIRED)
 
 if(WIN32)
     find_package(OpenCV CONFIG REQUIRED PATHS "<path to your opencv>")
@@ -21,28 +20,32 @@ elseif(UNIX)
 endif()
 
 set(PROJECT_SOURCES
-    main.cpp
-    app.cpp
-    app.hpp
-    gl_err_callback.cpp
-    glerror.cpp
-    callbacks.cpp
-    fps_meter.hpp
-    non_copyable.hpp
-    ShaderProgram.cpp
-    ShaderProgram.hpp
-    Mesh.hpp
-    OBJloader.cpp
-    OBJloader.hpp
-    meshgen.cpp
-    Model.hpp
-    Texture.cpp
-    Texture.hpp
+    src/main.cpp
+    src/app.cpp
+    src/app.hpp
+    src/callbacks.cpp
+    src/fps_meter.hpp
+    src/non_copyable.hpp
+    src/assets.hpp
+    src/gl_err_callback.cpp
+    src/gl_err_callback.hpp
+    src/glerror.cpp
+    src/glerror.hpp
+    src/ShaderProgram.cpp
+    src/ShaderProgram.hpp
+    src/Mesh.hpp
+    src/OBJloader.cpp
+    src/OBJloader.hpp
+    src/meshgen.cpp
+    src/Model.hpp
+    src/Camera.hpp
+    src/Texture.cpp
+    src/Texture.hpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE 
+target_link_libraries(${PROJECT_NAME} PRIVATE
     GLEW::GLEW
     glfw
     glm::glm
@@ -52,18 +55,18 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/src
     ${OpenCV_INCLUDE_DIRS}
 )
 
 # Copy shader files to build directory after every build
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${CMAKE_SOURCE_DIR}/basic.vert
-        ${CMAKE_SOURCE_DIR}/basic.frag
-        ${CMAKE_SOURCE_DIR}/GL_rainbow.frag
-        ${CMAKE_SOURCE_DIR}/tex.vert
-        ${CMAKE_SOURCE_DIR}/tex.frag
+        ${CMAKE_SOURCE_DIR}/shaders/basic.vert
+        ${CMAKE_SOURCE_DIR}/shaders/basic.frag
+        ${CMAKE_SOURCE_DIR}/shaders/GL_rainbow.frag
+        ${CMAKE_SOURCE_DIR}/shaders/tex.vert
+        ${CMAKE_SOURCE_DIR}/shaders/tex.frag
         $<TARGET_FILE_DIR:${PROJECT_NAME}>
     COMMENT "Copying shaders to build directory"
 )
