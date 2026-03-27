@@ -179,7 +179,7 @@ void App::init_assets(void) {
     // Test models to try (in order of preference)
     // Uncomment different models to test various OBJ formats
     std::vector<std::string> test_models = {
-        "../obj_samples/bunny_tri_vn.obj",
+        "../obj_samples/teapot_tri_vnt.obj",
     };
     
     bool model_loaded = false;

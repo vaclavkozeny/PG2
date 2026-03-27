@@ -53,3 +53,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${OpenCV_INCLUDE_DIRS}
 )
+
+# Copy shader files to build directory after every build
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_SOURCE_DIR}/basic.vert
+        ${CMAKE_SOURCE_DIR}/basic.frag
+        ${CMAKE_SOURCE_DIR}/GL_rainbow.frag
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>
+    COMMENT "Copying shaders to build directory"
+)
