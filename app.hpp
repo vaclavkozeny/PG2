@@ -54,7 +54,7 @@ private:
     glm::mat4 projection_matrix{glm::identity<glm::mat4>()};
     
     // Camera
-    Camera camera{glm::vec3(0.0f, 0.0f, 2.0f)};
+    Camera camera{glm::vec3(0.0f, 0.5f, 5.0f)};
     double cursorLastX{0.0};
     double cursorLastY{0.0};
     double last_frame_time{0.0};

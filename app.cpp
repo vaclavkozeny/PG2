@@ -138,15 +138,16 @@ bool App::init()
         // Get window dimensions and set up initial camera position
         glfwGetFramebufferSize(window, &width, &height);
         if (height <= 0) height = 1;
-        
+        glViewport(0, 0, width, height);
+
         // Initialize projection matrix
         update_projection_matrix();
-        
+
         // Get initial cursor position
         glfwGetCursorPos(window, &cursorLastX, &cursorLastY);
-        
-        // Initialize camera - constructor already calls updateCameraVectors
-        camera.Position = glm::vec3(0.0f, 0.0f, 2.0f);
+
+        // Camera at z=5 looking towards origin (bunny is at world origin)
+        camera.Position = glm::vec3(0.0f, 0.5f, 5.0f);
 
 		glfwShowWindow(window);
     }
@@ -190,8 +191,9 @@ void App::init_assets(void) {
             );
             std::cout << "✓ Successfully loaded: " << model_path << "\n";
             // Bunny is ~52x40x50 units centered at (-3.5, -3.2, 21).
-            model->setScale(glm::vec3(10.0f));
-            model->setPosition(glm::vec3(0.035f, 0.032f, -0.211f));
+            // setPosition = -scale * center  so the bunny ends up at world origin
+            model->setScale(glm::vec3(0.05f));
+            model->setPosition(glm::vec3(0.175f, 0.16f, -1.05f));
             model_loaded = true;
             break;
         }
@@ -291,8 +293,8 @@ int App::run(void)
                     glm::mat4 mesh_local = Model::createModelMatrix(mesh_pkg.origin, mesh_pkg.eulerAngles, mesh_pkg.scale);
                     mesh_pkg.shader->setUniform("uM_m", model->getModelMatrix() * mesh_local);
                     
-                    // Set time uniform for effects
-                    mesh_pkg.shader->setUniform("iTime", static_cast<GLfloat>(glfwGetTime()));
+                    // Set time uniform for effects (only used by rainbow shader)
+                    //mesh_pkg.shader->setUniform("iTime", static_cast<GLfloat>(glfwGetTime()));
                     
                     mesh_pkg.mesh->draw();
                 }
