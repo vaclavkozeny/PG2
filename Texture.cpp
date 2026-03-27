@@ -9,6 +9,12 @@ cv::Mat Texture::load_image(const std::filesystem::path& path) {
     cv::Mat img = cv::imread(path.string(), cv::IMREAD_UNCHANGED);
     if (img.empty())
         throw std::runtime_error("Texture: cannot load image: " + path.string());
+
+    // PNG/TIFF can be 16-bit per channel — convert to 8-bit so GL upload works
+    if (img.depth() != CV_8U) {
+        img.convertTo(img, CV_8U, 255.0 / 65535.0);
+    }
+
     return img;
 }
 
