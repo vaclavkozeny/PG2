@@ -41,6 +41,7 @@ set(PROJECT_SOURCES
     src/Camera.hpp
     src/Texture.cpp
     src/Texture.hpp
+    src/Particle.hpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
@@ -69,6 +70,8 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         ${CMAKE_SOURCE_DIR}/shaders/tex.frag
         ${CMAKE_SOURCE_DIR}/shaders/lighting.vert
         ${CMAKE_SOURCE_DIR}/shaders/lighting.frag
+        ${CMAKE_SOURCE_DIR}/shaders/particle.vert
+        ${CMAKE_SOURCE_DIR}/shaders/particle.frag
         $<TARGET_FILE_DIR:${PROJECT_NAME}>
     COMMENT "Copying shaders to build directory"
 )

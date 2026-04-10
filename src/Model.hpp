@@ -25,6 +25,12 @@ public:
     glm::vec3 eulerAngles{};    // pitch, yaw, roll (in degrees)
     glm::vec3 scale{1.0f};
 
+    // Transparency (Task 1 — 09cv)
+    // Set is_transparent=true and alpha<1.0 to enable the painter's algorithm
+    // path and blended rendering for this model.
+    bool  is_transparent{false};
+    float alpha{1.0f};  // 0 = invisible, 1 = fully opaque
+
     // mesh related data
     struct mesh_package {
         std::shared_ptr<Mesh> mesh;

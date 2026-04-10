@@ -1,8 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
-#include <unordered_map>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include <GL/glew.h>
@@ -11,13 +12,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "assets.hpp"
-#include "ShaderProgram.hpp"
-#include "Model.hpp"
-#include "Texture.hpp"
 #include "Camera.hpp"
+#include "Model.hpp"
+#include "Particle.hpp"
+#include "ShaderProgram.hpp"
+#include "Texture.hpp"
 
 // ============================================================
-// Light data structures
+// Lighting (from 08cv — unchanged)
 // ============================================================
 
 struct DirectionalLight {
@@ -34,11 +36,11 @@ struct PointLight {
     float constant {1.0f};
     float linear   {0.09f};
     float quadratic{0.032f};
-    // Orbit parameters (animation)
+    // Orbit animation
     float orbitRadius{3.0f};
     float orbitHeight{0.0f};
     float orbitSpeed {1.0f};
-    float orbitAngle {0.0f};   // updated each frame
+    float orbitAngle {0.0f};
 
     glm::vec3 currentWorldPos() const {
         return glm::vec3(
@@ -50,18 +52,52 @@ struct PointLight {
 };
 
 struct SpotLight {
-    glm::vec3 direction  {0.0f,  0.0f, -1.0f}; // view space: camera looks down -Z
+    glm::vec3 direction  {0.0f,  0.0f, -1.0f};
     glm::vec3 ambient    {0.0f,  0.0f,  0.0f};
     glm::vec3 diffuse    {1.0f,  1.0f,  0.9f};
     glm::vec3 specular   {1.0f,  1.0f,  0.9f};
-    float cutoff     {0.9763f};  // cos(12.5 deg)
-    float outerCutoff{0.9537f};  // cos(17.5 deg)
+    float cutoff     {0.9763f};  // cos(12.5°)
+    float outerCutoff{0.9537f};  // cos(17.5°)
     float constant {1.0f};
     float linear   {0.045f};
     float quadratic{0.0075f};
     bool  on{true};
 };
 
+// ============================================================
+// Material — Phong surface description
+// ============================================================
+
+struct Material {
+    glm::vec3 ambient {0.2f, 0.2f, 0.2f};
+    glm::vec3 diffuse {0.8f, 0.8f, 0.8f};
+    glm::vec3 specular{0.5f, 0.5f, 0.5f};
+    float shininess{32.0f};
+};
+
+// ============================================================
+// GlassObject — transparent model paired with its material
+// ============================================================
+
+struct GlassObject {
+    std::shared_ptr<Model> model;
+    Material               mat;
+};
+
+// ============================================================
+// EnemyState — simple chasing sphere (Task 2)
+// ============================================================
+
+struct EnemyState {
+    glm::vec3 position   {-4.0f, 0.75f, -4.0f};
+    glm::vec3 velocity   {0.0f};
+    float     radius     {0.75f};
+    float     hitCooldown{0.0f};
+    static constexpr float SPEED = 1.5f;  // world units / second
+};
+
+// ============================================================
+// Application
 // ============================================================
 
 class App {
@@ -80,34 +116,48 @@ public:
     int  savedXPos{0}, savedYPos{0};
     int  savedWidth{800}, savedHeight{600};
 
-    // UI toggles (used by key callbacks)
+    // UI / vsync
     bool show_imgui{true};
-
-    // VSync
     bool vsync{true};
 
     // Asset libraries
     std::unordered_map<std::string, std::shared_ptr<ShaderProgram>> shader_library;
     std::unordered_map<std::string, std::shared_ptr<Texture>>       texture_library;
-    std::shared_ptr<Model> model;
-    std::shared_ptr<Model> textured_model;
+
+    // ---- Scene models ----
+    std::shared_ptr<Model> model;           // bunny (opaque)
+    std::shared_ptr<Model> textured_model;  // main textured sphere (opaque)
+    std::shared_ptr<Model> ground;          // ground plane (opaque)
+    std::shared_ptr<Model> enemy_model;     // enemy sphere (opaque, Task 2)
+
+    // Task 1: Transparent glass spheres (painter's algorithm)
+    std::vector<GlassObject> transparent_objects;
+
+    // Task 2: Enemy + collision constants
+    EnemyState enemy;
+    static constexpr float CAMERA_RADIUS = 0.4f;   // approximate player sphere radius
+    static constexpr float MAP_HALF_SIZE = 12.0f;   // XZ boundary ±12 units
+    static constexpr float FLOOR_Y       = 0.0f;    // ground plane Y
+
+    // Task 3: Particle system (tetrahedron particles)
+    ParticleSystem particle_system;
 
     // ---- Lighting ----
-    DirectionalLight              dirLight;
-    std::array<PointLight, 3>     pointLights;
-    SpotLight                     spotLight;
+    DirectionalLight          dirLight;
+    std::array<PointLight, 3> pointLights;
+    SpotLight                 spotLight;
 
-    // Windowing helpers
-    void         toggle_fullscreen(GLFWwindow* window);
-    GLFWmonitor* GetCurrentMonitor(GLFWwindow* window);
+    // Window helpers
+    void         toggle_fullscreen(GLFWwindow* win);
+    GLFWmonitor* GetCurrentMonitor(GLFWwindow* win);
 
-    // GLFW callbacks (static — retrieved via glfwGetWindowUserPointer)
+    // GLFW callbacks
     static void glfw_error_callback(int error, const char* description);
-    static void glfw_framebuffer_size_callback(GLFWwindow* window, int width, int height);
-    static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
-    static void glfw_mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
-    static void glfw_cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
-    static void glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+    static void glfw_framebuffer_size_callback(GLFWwindow*, int w, int h);
+    static void glfw_key_callback(GLFWwindow*, int key, int scancode, int action, int mods);
+    static void glfw_mouse_button_callback(GLFWwindow*, int button, int action, int mods);
+    static void glfw_cursor_position_callback(GLFWwindow*, double xpos, double ypos);
+    static void glfw_scroll_callback(GLFWwindow*, double xoffset, double yoffset);
 
 private:
     // Viewport / projection
@@ -115,10 +165,9 @@ private:
     float fov{60.0f};
     glm::mat4 projection_matrix{glm::identity<glm::mat4>()};
 
-    // Camera
-    Camera camera{glm::vec3(0.0f, 0.5f, 5.0f)};
-    double cursorLastX{0.0};
-    double cursorLastY{0.0};
+    // Camera — starts 1.5 m above floor, 8 m back
+    Camera camera{glm::vec3(0.0f, 1.5f, 8.0f)};
+    double cursorLastX{0.0}, cursorLastY{0.0};
     double last_frame_time{0.0};
 
     // FPS counter
@@ -131,7 +180,7 @@ private:
     void init_assets();
     void update_projection_matrix();
 
-    // Lighting helpers
+    // Upload all light uniforms to a shader program
     void set_lighting_uniforms(const std::shared_ptr<ShaderProgram>& shader,
                                const glm::mat4& view_matrix) const;
 };
