@@ -36,6 +36,12 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
 				this_inst->toggle_fullscreen(window);
 			}
 			break;
+		case GLFW_KEY_H:
+			if (action == GLFW_PRESS) {
+				this_inst->spotLight.on = !this_inst->spotLight.on;
+				std::cout << "Headlight: " << (this_inst->spotLight.on ? "ON" : "OFF") << "\n";
+			}
+			break;
 		default:
 			break;
 		}

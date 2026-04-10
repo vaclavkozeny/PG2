@@ -67,6 +67,8 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         ${CMAKE_SOURCE_DIR}/shaders/GL_rainbow.frag
         ${CMAKE_SOURCE_DIR}/shaders/tex.vert
         ${CMAKE_SOURCE_DIR}/shaders/tex.frag
+        ${CMAKE_SOURCE_DIR}/shaders/lighting.vert
+        ${CMAKE_SOURCE_DIR}/shaders/lighting.frag
         $<TARGET_FILE_DIR:${PROJECT_NAME}>
     COMMENT "Copying shaders to build directory"
 )

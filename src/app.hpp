@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <unordered_map>
 #include <memory>
 #include <vector>
@@ -14,6 +15,54 @@
 #include "Model.hpp"
 #include "Texture.hpp"
 #include "Camera.hpp"
+
+// ============================================================
+// Light data structures
+// ============================================================
+
+struct DirectionalLight {
+    glm::vec3 direction{-0.3f, -1.0f, -0.5f}; // world space
+    glm::vec3 ambient  {0.04f, 0.04f, 0.04f};
+    glm::vec3 diffuse  {1.0f,  0.9f,  0.7f};
+    glm::vec3 specular {1.0f,  0.95f, 0.8f};
+};
+
+struct PointLight {
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+    glm::vec3 ambient  {0.02f, 0.02f, 0.02f};
+    float constant {1.0f};
+    float linear   {0.09f};
+    float quadratic{0.032f};
+    // Orbit parameters (animation)
+    float orbitRadius{3.0f};
+    float orbitHeight{0.0f};
+    float orbitSpeed {1.0f};
+    float orbitAngle {0.0f};   // updated each frame
+
+    glm::vec3 currentWorldPos() const {
+        return glm::vec3(
+            orbitRadius * glm::cos(orbitAngle),
+            orbitHeight,
+            orbitRadius * glm::sin(orbitAngle)
+        );
+    }
+};
+
+struct SpotLight {
+    glm::vec3 direction  {0.0f,  0.0f, -1.0f}; // view space: camera looks down -Z
+    glm::vec3 ambient    {0.0f,  0.0f,  0.0f};
+    glm::vec3 diffuse    {1.0f,  1.0f,  0.9f};
+    glm::vec3 specular   {1.0f,  1.0f,  0.9f};
+    float cutoff     {0.9763f};  // cos(12.5 deg)
+    float outerCutoff{0.9537f};  // cos(17.5 deg)
+    float constant {1.0f};
+    float linear   {0.045f};
+    float quadratic{0.0075f};
+    bool  on{true};
+};
+
+// ============================================================
 
 class App {
 public:
@@ -31,7 +80,7 @@ public:
     int  savedXPos{0}, savedYPos{0};
     int  savedWidth{800}, savedHeight{600};
 
-    // UI toggle (used by key callback)
+    // UI toggles (used by key callbacks)
     bool show_imgui{true};
 
     // VSync
@@ -43,8 +92,13 @@ public:
     std::shared_ptr<Model> model;
     std::shared_ptr<Model> textured_model;
 
+    // ---- Lighting ----
+    DirectionalLight              dirLight;
+    std::array<PointLight, 3>     pointLights;
+    SpotLight                     spotLight;
+
     // Windowing helpers
-    void        toggle_fullscreen(GLFWwindow* window);
+    void         toggle_fullscreen(GLFWwindow* window);
     GLFWmonitor* GetCurrentMonitor(GLFWwindow* window);
 
     // GLFW callbacks (static — retrieved via glfwGetWindowUserPointer)
@@ -76,4 +130,8 @@ private:
     void init_imgui();
     void init_assets();
     void update_projection_matrix();
+
+    // Lighting helpers
+    void set_lighting_uniforms(const std::shared_ptr<ShaderProgram>& shader,
+                               const glm::mat4& view_matrix) const;
 };
