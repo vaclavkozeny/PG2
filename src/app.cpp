@@ -16,8 +16,43 @@
 #include <imgui_impl_opengl3.h>
 
 #include "app.hpp"
-#include "gl_err_callback.hpp"
+#include "assets.hpp"
 #include "fps_meter.hpp"
+#include "gl_err_callback.hpp"
+
+// ============================================================
+// File-internal material constants.
+//
+// Defined once here instead of re-constructing them every frame.
+// Adding a new material: add an entry in this block and reference
+// it by name in draw calls below.
+// ============================================================
+namespace {
+    const Material MAT_GROUND {
+        glm::vec3(0.25f),
+        glm::vec3(0.65f),
+        glm::vec3(0.05f),
+        4.0f
+    };
+    const Material MAT_BUNNY {
+        glm::vec3(0.15f),
+        glm::vec3(0.85f),
+        glm::vec3(0.10f),
+        16.0f
+    };
+    const Material MAT_SPHERE {
+        glm::vec3(0.15f),
+        glm::vec3(0.90f),
+        glm::vec3(0.70f),
+        64.0f
+    };
+    const Material MAT_ENEMY {
+        glm::vec3(0.20f, 0.04f, 0.04f),
+        glm::vec3(0.95f, 0.10f, 0.10f),
+        glm::vec3(0.80f, 0.30f, 0.30f),
+        32.0f
+    };
+} // namespace
 
 // --------------------------------------------------------------------------
 // Constructor / Destructor
@@ -42,7 +77,7 @@ App::~App() {
 }
 
 // --------------------------------------------------------------------------
-// Initialization
+// OpenGL / GLFW bootstrap
 // --------------------------------------------------------------------------
 
 void App::initOpenGL() {
@@ -51,13 +86,11 @@ void App::initOpenGL() {
     if (!glfwInit())
         throw std::runtime_error("GLFW can not be initialized.");
 
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-
-    // macOS requires Core Profile 4.1
+    glfwWindowHint(GLFW_VISIBLE,              GLFW_FALSE);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_PROFILE,        GLFW_OPENGL_CORE_PROFILE);
 
     window = glfwCreateWindow(800, 600, "OpenGL context", nullptr, nullptr);
     if (!window)
@@ -68,10 +101,10 @@ void App::initOpenGL() {
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
-    glfwSetMouseButtonCallback(window,     glfw_mouse_button_callback);
-    glfwSetKeyCallback(window,             glfw_key_callback);
-    glfwSetScrollCallback(window,          glfw_scroll_callback);
-    glfwSetCursorPosCallback(window,       glfw_cursor_position_callback);
+    glfwSetMouseButtonCallback    (window, glfw_mouse_button_callback);
+    glfwSetKeyCallback            (window, glfw_key_callback);
+    glfwSetScrollCallback         (window, glfw_scroll_callback);
+    glfwSetCursorPosCallback      (window, glfw_cursor_position_callback);
 
     glewExperimental = GL_TRUE;
     glewInit();
@@ -108,16 +141,15 @@ bool App::init() {
         glfwGetFramebufferSize(window, &width, &height);
         if (height <= 0) height = 1;
         glViewport(0, 0, width, height);
-
         update_projection_matrix();
 
+        // Capture the initial cursor position so the first mouse event
+        // doesn't produce a large spurious delta.
         glfwGetCursorPos(window, &cursorLastX, &cursorLastY);
-
-        camera.Position = glm::vec3(0.0f, 1.5f, 8.0f);
 
         glfwShowWindow(window);
     }
-    catch (std::exception const& e) {
+    catch (const std::exception& e) {
         std::cerr << "Init failed: " << e.what() << "\n";
         throw;
     }
@@ -125,38 +157,57 @@ bool App::init() {
     return true;
 }
 
+// --------------------------------------------------------------------------
+// Asset initialisation — split by concern
+// --------------------------------------------------------------------------
+
 void App::init_assets() {
-    // ---- Shaders ----
-    shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>(
-        std::filesystem::path("./basic.vert"),
-        std::filesystem::path("./basic.frag")
-    ));
-    shader_library.emplace("texture_shader", std::make_shared<ShaderProgram>(
-        std::filesystem::path("./tex.vert"),
-        std::filesystem::path("./tex.frag")
-    ));
-    shader_library.emplace("lighting", std::make_shared<ShaderProgram>(
-        std::filesystem::path("./lighting.vert"),
-        std::filesystem::path("./lighting.frag")
-    ));
-    // Task 3: Unlit particle shader
-    shader_library.emplace("particle", std::make_shared<ShaderProgram>(
-        std::filesystem::path("./particle.vert"),
-        std::filesystem::path("./particle.frag")
-    ));
+    init_shaders();
+    init_textures();
+    init_scene();
+    init_lighting();
+    std::cout << "Assets initialized...\n";
+}
 
-    // ---- Textures ----
-    texture_library.emplace("box",
-        std::make_shared<Texture>(std::filesystem::path("../resources/textures/box.png")));
-    texture_library.emplace("tex256",
-        std::make_shared<Texture>(std::filesystem::path("../resources/textures/tex_256.png")));
-    // Solid white: used when the material color should drive appearance
-    texture_library.emplace("white",
-        std::make_shared<Texture>(glm::vec3(1.0f)));
-
-    // ---- Ground plane (large textured quad at y=0) ----
+void App::init_shaders() {
+    auto load = [&](const std::string& name,
+                    const std::string& vert,
+                    const std::string& frag)
     {
-        // Tiled 4x texture coords for visual interest
+        shader_library.emplace(name, std::make_shared<ShaderProgram>(
+            std::filesystem::path(vert),
+            std::filesystem::path(frag)
+        ));
+    };
+
+    load("simple_shader",  "./basic.vert",    "./basic.frag");
+    load("texture_shader", "./tex.vert",      "./tex.frag");
+    load("lighting",       "./lighting.vert", "./lighting.frag");
+    load("particle",       "./particle.vert", "./particle.frag");
+}
+
+void App::init_textures() {
+    auto load_file = [&](const std::string& name, const std::string& path) {
+        texture_library.emplace(name,
+            std::make_shared<Texture>(std::filesystem::path(path)));
+    };
+
+    load_file("box",    "../resources/textures/box.png");
+    load_file("tex256", "../resources/textures/tex_256.png");
+
+    // Solid white: lets the material diffuse color drive appearance
+    // when a model has no meaningful UV texture.
+    texture_library.emplace("white", std::make_shared<Texture>(glm::vec3(1.0f)));
+}
+
+void App::init_scene() {
+    auto& lit     = shader_library.at("lighting");
+    auto& white   = texture_library.at("white");
+    auto& box_tex = texture_library.at("box");
+    auto& tile    = texture_library.at("tex256");
+
+    // ---- Ground plane (24×24, tiled 4×) ----
+    {
         const float H = MAP_HALF_SIZE;
         std::vector<Vertex> verts{
             {{-H, 0.0f, -H}, {0,1,0}, {0.0f, 0.0f}},
@@ -164,113 +215,88 @@ void App::init_assets() {
             {{-H, 0.0f,  H}, {0,1,0}, {0.0f, 4.0f}},
             {{ H, 0.0f,  H}, {0,1,0}, {4.0f, 4.0f}},
         };
-        // Two CCW triangles — normal points +Y
+        // Indices: two CCW triangles → normal points +Y
         std::vector<GLuint> idx{0, 2, 1, 1, 2, 3};
         auto mesh = std::make_shared<Mesh>(verts, idx, GL_TRIANGLES);
-        ground = std::make_shared<Model>();
-        ground->addMesh(mesh, shader_library.at("lighting"), texture_library.at("tex256"));
+        ground_model = std::make_shared<Model>();
+        ground_model->addMesh(mesh, lit, tile);
     }
 
     // ---- Bunny (opaque, white diffuse) ----
     try {
-        model = std::make_shared<Model>(
-            std::filesystem::path("../obj_samples/bunny_tri_vn.obj"),
-            shader_library.at("lighting")
-        );
-        model->setScale(glm::vec3(0.05f));
-        model->setPosition(glm::vec3(0.175f, 0.0f, -1.05f));
-        model->meshes[0].texture = texture_library.at("white");
+        bunny_model = std::make_shared<Model>(
+            std::filesystem::path("../obj_samples/bunny_tri_vn.obj"), lit);
+        bunny_model->setScale(glm::vec3(0.05f));
+        bunny_model->setPosition(glm::vec3(0.175f, 0.0f, -1.05f));
+        bunny_model->meshes[0].texture = white;
         std::cout << "Loaded bunny\n";
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         std::cerr << "Could not load bunny: " << e.what() << "\n";
     }
 
     // ---- Main textured sphere (opaque, box texture) ----
     try {
-        textured_model = std::make_shared<Model>(
-            std::filesystem::path("../obj_samples/sphere_tri_vnt.obj"),
-            shader_library.at("lighting")
-        );
-        textured_model->setScale(glm::vec3(1.5f));
-        textured_model->setPosition(glm::vec3(3.5f, 1.5f, 0.0f)); // raised to sit on ground
-        textured_model->meshes[0].texture = texture_library.at("box");
+        sphere_model = std::make_shared<Model>(
+            std::filesystem::path("../obj_samples/sphere_tri_vnt.obj"), lit);
+        sphere_model->setScale(glm::vec3(1.5f));
+        sphere_model->setPosition(glm::vec3(3.5f, 1.5f, 0.0f)); // y=radius: sits on floor
+        sphere_model->meshes[0].texture = box_tex;
         std::cout << "Loaded textured sphere\n";
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         std::cerr << "Could not load textured sphere: " << e.what() << "\n";
     }
 
-    // ---- Enemy sphere (opaque, red) — Task 2 ----
+    // ---- Enemy sphere (opaque, red — Task 2) ----
     try {
         enemy_model = std::make_shared<Model>(
-            std::filesystem::path("../obj_samples/sphere_tri_vnt.obj"),
-            shader_library.at("lighting")
-        );
+            std::filesystem::path("../obj_samples/sphere_tri_vnt.obj"), lit);
         enemy_model->setScale(glm::vec3(enemy.radius));
         enemy_model->setPosition(enemy.position);
-        enemy_model->meshes[0].texture = texture_library.at("white");
+        enemy_model->meshes[0].texture = white;
         std::cout << "Loaded enemy sphere\n";
-    }
-    catch (const std::exception& e) {
-        std::cerr << "Could not load enemy sphere: " << e.what() << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Could not load enemy: " << e.what() << "\n";
     }
 
-    // ---- Task 1: Three semi-transparent glass spheres ----
+    // ---- Transparent glass spheres (Task 1) ----
     //
-    // Each has is_transparent=true, alpha<1, and a distinctive glass color.
-    // They are rendered in a second pass using the painter's algorithm
-    // (sorted back-to-front from the camera, drawn with blending enabled
-    //  and depth writes disabled).
-    //
-    struct GlassCfg {
-        glm::vec3 pos;
-        float     scale;
-        float     alpha;
-        glm::vec3 ambient;
-        glm::vec3 diffuse;
+    // Each entry: world position, uniform scale, alpha, ambient color, diffuse color.
+    // To add more: append to this table — no other code needs changing.
+    struct GlassSpec { glm::vec3 pos; float scale, alpha; glm::vec3 amb, diff; };
+    const GlassSpec specs[] = {
+        {{ 2.0f, 0.5f,-3.0f}, 0.5f, 0.45f, {0.04f,0.18f,0.18f}, {0.10f,0.90f,0.90f}}, // cyan
+        {{-2.0f, 0.8f, 2.0f}, 0.8f, 0.40f, {0.18f,0.04f,0.18f}, {0.90f,0.10f,0.90f}}, // magenta
+        {{ 0.5f, 1.2f, 4.5f}, 1.2f, 0.35f, {0.18f,0.18f,0.04f}, {0.90f,0.85f,0.10f}}, // gold
     };
-    const GlassCfg glassCfgs[] = {
-        // Cyan glass sphere
-        {{ 2.0f, 0.5f, -3.0f}, 0.5f, 0.45f, {0.04f, 0.18f, 0.18f}, {0.1f, 0.9f, 0.9f}},
-        // Magenta glass sphere
-        {{-2.0f, 0.8f,  2.0f}, 0.8f, 0.40f, {0.18f, 0.04f, 0.18f}, {0.9f, 0.1f, 0.9f}},
-        // Gold glass sphere
-        {{ 0.5f, 1.2f,  4.5f}, 1.2f, 0.35f, {0.18f, 0.18f, 0.04f}, {0.9f, 0.85f, 0.1f}},
-    };
-
-    for (const auto& cfg : glassCfgs) {
+    for (const auto& s : specs) {
         try {
             auto sphere = std::make_shared<Model>(
-                std::filesystem::path("../obj_samples/sphere_tri_vnt.obj"),
-                shader_library.at("lighting")
-            );
-            sphere->setScale(glm::vec3(cfg.scale));
-            sphere->setPosition(cfg.pos);
-            sphere->meshes[0].texture = texture_library.at("white");
+                std::filesystem::path("../obj_samples/sphere_tri_vnt.obj"), lit);
+            sphere->setScale(glm::vec3(s.scale));
+            sphere->setPosition(s.pos);
+            sphere->meshes[0].texture = white;
             sphere->is_transparent    = true;
-            sphere->alpha             = cfg.alpha;
+            sphere->alpha             = s.alpha;
 
             Material mat;
-            mat.ambient   = cfg.ambient;
-            mat.diffuse   = cfg.diffuse;
-            mat.specular  = glm::vec3(0.95f);  // very shiny glass
+            mat.ambient   = s.amb;
+            mat.diffuse   = s.diff;
+            mat.specular  = glm::vec3(0.95f);
             mat.shininess = 128.0f;
 
             transparent_objects.push_back({sphere, mat});
             std::cout << "Loaded glass sphere at ("
-                      << cfg.pos.x << "," << cfg.pos.y << "," << cfg.pos.z << ")\n";
-        }
-        catch (const std::exception& e) {
+                      << s.pos.x << ',' << s.pos.y << ',' << s.pos.z << ")\n";
+        } catch (const std::exception& e) {
             std::cerr << "Could not load glass sphere: " << e.what() << "\n";
         }
     }
 
-    // ---- Task 3: Particle system — tetrahedron mesh ----
+    // ---- Particle mesh: regular tetrahedron (Task 3) ----
     //
-    // A regular tetrahedron has 4 vertices: each pair of vertices is the same
-    // distance apart. With GL_TRIANGLE_STRIP and 4 vertices we get 2 visible
-    // triangles, which is sufficient for small fast-moving particles.
+    // Four vertices → GL_TRIANGLE_STRIP gives 2 visible triangles — enough
+    // for small fast-moving particles (README spec: "four vertices forming
+    // GL_TRIANGLE_STRIP").
     {
         std::vector<Vertex> tv{
             {{ 1.0f,  1.0f,  1.0f}, {0,0,0}, {0,0}},
@@ -279,64 +305,62 @@ void App::init_assets() {
             {{-1.0f, -1.0f,  1.0f}, {0,0,0}, {0,0}},
         };
         std::vector<GLuint> ti{0, 1, 2, 3};
-        auto tetraMesh = std::make_shared<Mesh>(tv, ti, GL_TRIANGLE_STRIP);
-        particle_system.init(tetraMesh);
+        particle_system.init(std::make_shared<Mesh>(tv, ti, GL_TRIANGLE_STRIP));
     }
+}
 
-    // ---- Lighting setup ----
-
-    // Directional light — animated sun
+void App::init_lighting() {
+    // ---- Directional (sun) — animated in run() ----
     dirLight.direction = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
     dirLight.ambient   = glm::vec3(0.04f);
     dirLight.diffuse   = glm::vec3(1.0f, 0.9f, 0.7f);
     dirLight.specular  = glm::vec3(1.0f, 0.95f, 0.8f);
 
-    // Point light 0 — red/warm, fast orbit at height 1.5
-    pointLights[0].diffuse      = glm::vec3(1.0f, 0.25f, 0.1f);
-    pointLights[0].specular     = glm::vec3(1.0f, 0.25f, 0.1f);
-    pointLights[0].ambient      = glm::vec3(0.02f, 0.005f, 0.002f);
-    pointLights[0].orbitRadius  = 4.0f;
-    pointLights[0].orbitHeight  = 1.5f;
-    pointLights[0].orbitSpeed   = 1.4f;
-    pointLights[0].orbitAngle   = 0.0f;
-    pointLights[0].linear       = 0.07f;
-    pointLights[0].quadratic    = 0.017f;
+    // ---- Point lights — each orbits at a different radius/height/speed ----
+    // Red/warm — fast, high
+    pointLights[0].diffuse     = glm::vec3(1.0f, 0.25f, 0.1f);
+    pointLights[0].specular    = glm::vec3(1.0f, 0.25f, 0.1f);
+    pointLights[0].ambient     = glm::vec3(0.02f, 0.005f, 0.002f);
+    pointLights[0].orbitRadius = 4.0f;
+    pointLights[0].orbitHeight = 1.5f;
+    pointLights[0].orbitSpeed  = 1.4f;
+    pointLights[0].orbitAngle  = 0.0f;
+    pointLights[0].linear      = 0.07f;
+    pointLights[0].quadratic   = 0.017f;
 
-    // Point light 1 — blue/cool, medium orbit at height 0
-    pointLights[1].diffuse      = glm::vec3(0.2f, 0.45f, 1.0f);
-    pointLights[1].specular     = glm::vec3(0.2f, 0.45f, 1.0f);
-    pointLights[1].ambient      = glm::vec3(0.004f, 0.009f, 0.02f);
-    pointLights[1].orbitRadius  = 3.0f;
-    pointLights[1].orbitHeight  = 0.8f;
-    pointLights[1].orbitSpeed   = 0.8f;
-    pointLights[1].orbitAngle   = 2.09f; // 120° offset
-    pointLights[1].linear       = 0.09f;
-    pointLights[1].quadratic    = 0.032f;
+    // Blue/cool — medium, mid-height (120° offset)
+    pointLights[1].diffuse     = glm::vec3(0.2f, 0.45f, 1.0f);
+    pointLights[1].specular    = glm::vec3(0.2f, 0.45f, 1.0f);
+    pointLights[1].ambient     = glm::vec3(0.004f, 0.009f, 0.02f);
+    pointLights[1].orbitRadius = 3.0f;
+    pointLights[1].orbitHeight = 0.8f;
+    pointLights[1].orbitSpeed  = 0.8f;
+    pointLights[1].orbitAngle  = 2.09f;  // 2π/3
+    pointLights[1].linear      = 0.09f;
+    pointLights[1].quadratic   = 0.032f;
 
-    // Point light 2 — green, slow wide orbit at height -0.5
-    pointLights[2].diffuse      = glm::vec3(0.15f, 1.0f, 0.3f);
-    pointLights[2].specular     = glm::vec3(0.15f, 1.0f, 0.3f);
-    pointLights[2].ambient      = glm::vec3(0.003f, 0.02f, 0.006f);
-    pointLights[2].orbitRadius  = 5.5f;
-    pointLights[2].orbitHeight  = 1.0f;
-    pointLights[2].orbitSpeed   = 0.5f;
-    pointLights[2].orbitAngle   = 4.19f; // 240° offset
-    pointLights[2].linear       = 0.045f;
-    pointLights[2].quadratic    = 0.0075f;
+    // Green — slow, wide (240° offset)
+    pointLights[2].diffuse     = glm::vec3(0.15f, 1.0f, 0.3f);
+    pointLights[2].specular    = glm::vec3(0.15f, 1.0f, 0.3f);
+    pointLights[2].ambient     = glm::vec3(0.003f, 0.02f, 0.006f);
+    pointLights[2].orbitRadius = 5.5f;
+    pointLights[2].orbitHeight = 1.0f;
+    pointLights[2].orbitSpeed  = 0.5f;
+    pointLights[2].orbitAngle  = 4.19f;  // 4π/3
+    pointLights[2].linear      = 0.045f;
+    pointLights[2].quadratic   = 0.0075f;
 
-    // Spotlight — camera headlight (H to toggle)
-    spotLight.direction   = glm::vec3(0.0f, 0.0f, -1.0f);
+    // ---- Spotlight — camera headlight (H to toggle) ----
+    spotLight.direction   = glm::vec3(0.0f, 0.0f, -1.0f); // view-space -Z
     spotLight.ambient     = glm::vec3(0.0f);
     spotLight.diffuse     = glm::vec3(1.0f, 1.0f, 0.9f);
     spotLight.specular    = glm::vec3(1.0f, 1.0f, 0.9f);
     spotLight.cutoff      = std::cos(glm::radians(12.5f));
-    spotLight.outerCutoff = std::cos(glm::radians(20.0f));
+    spotLight.outerCutoff = std::cos(glm::radians(17.5f));
     spotLight.constant    = 1.0f;
     spotLight.linear      = 0.045f;
     spotLight.quadratic   = 0.0075f;
     spotLight.on          = true;
-
-    std::cout << "Assets initialized...\n";
 }
 
 // --------------------------------------------------------------------------
@@ -346,18 +370,18 @@ void App::init_assets() {
 void App::set_lighting_uniforms(const std::shared_ptr<ShaderProgram>& shader,
                                 const glm::mat4& view_matrix) const
 {
-    glm::mat3 V3(view_matrix);
+    const glm::mat3 V3(view_matrix); // upper-left 3×3 for direction transforms
 
-    // Directional light
+    // Directional (view-space direction)
     shader->setUniform("dirLight.direction", V3 * dirLight.direction);
     shader->setUniform("dirLight.ambient",   dirLight.ambient);
     shader->setUniform("dirLight.diffuse",   dirLight.diffuse);
     shader->setUniform("dirLight.specular",  dirLight.specular);
 
-    // Point lights
-    for (int i = 0; i < 3; i++) {
+    // Point lights (view-space positions)
+    for (int i = 0; i < 3; ++i) {
         const std::string p = "pointLights[" + std::to_string(i) + "].";
-        glm::vec3 posV = glm::vec3(view_matrix * glm::vec4(pointLights[i].currentWorldPos(), 1.0f));
+        const glm::vec3 posV = glm::vec3(view_matrix * glm::vec4(pointLights[i].worldPosition(), 1.0f));
         shader->setUniform(p + "position",  posV);
         shader->setUniform(p + "ambient",   pointLights[i].ambient);
         shader->setUniform(p + "diffuse",   pointLights[i].diffuse);
@@ -367,7 +391,7 @@ void App::set_lighting_uniforms(const std::shared_ptr<ShaderProgram>& shader,
         shader->setUniform(p + "quadratic", pointLights[i].quadratic);
     }
 
-    // Spotlight (camera-space: pos=origin, dir=(0,0,-1))
+    // Spotlight (camera = view-space origin, dir = -Z)
     shader->setUniform("spotLight.direction",   spotLight.direction);
     shader->setUniform("spotLight.ambient",     spotLight.ambient);
     shader->setUniform("spotLight.diffuse",     spotLight.diffuse);
@@ -378,6 +402,42 @@ void App::set_lighting_uniforms(const std::shared_ptr<ShaderProgram>& shader,
     shader->setUniform("spotLight.linear",      spotLight.linear);
     shader->setUniform("spotLight.quadratic",   spotLight.quadratic);
     shader->setUniform("spotLightOn",           spotLight.on ? 1 : 0);
+}
+
+// --------------------------------------------------------------------------
+// draw_model_lit — uploads per-object Phong uniforms and draws all meshes.
+//
+// alpha = 1.0  → opaque pass
+// alpha < 1.0  → transparent pass (blending must already be enabled by caller)
+// --------------------------------------------------------------------------
+
+void App::draw_model_lit(const std::shared_ptr<Model>& mdl,
+                         const Material& mat,
+                         const glm::mat4& view,
+                         float alpha)
+{
+    if (!mdl) return;
+    for (const auto& pkg : mdl->meshes) {
+        pkg.shader->use();
+        pkg.shader->setUniform("uP_m", projection_matrix);
+        pkg.shader->setUniform("uV_m", view);
+
+        const glm::mat4 localM = Model::createModelMatrix(
+            pkg.origin, pkg.eulerAngles, pkg.scale);
+        pkg.shader->setUniform("uM_m", mdl->getModelMatrix() * localM);
+
+        pkg.shader->setUniform("mat_ambient",   mat.ambient);
+        pkg.shader->setUniform("mat_diffuse",   mat.diffuse);
+        pkg.shader->setUniform("mat_specular",  mat.specular);
+        pkg.shader->setUniform("mat_shininess", mat.shininess);
+        pkg.shader->setUniform("mat_alpha",     alpha);
+
+        if (pkg.texture) {
+            pkg.texture->bind(0);
+            pkg.shader->setUniform("tex0", 0);
+        }
+        pkg.mesh->draw();
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -393,59 +453,54 @@ int App::run() {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
 
-            double currentTime = glfwGetTime();
-            double deltaTime   = currentTime - last_frame_time;
-            last_frame_time    = currentTime;
-            const float dt     = static_cast<float>(deltaTime);
-            frameCount++;
+            const double currentTime = glfwGetTime();
+            const float  dt          = static_cast<float>(currentTime - last_frame_time);
+            last_frame_time = currentTime;
+            ++frameCount;
 
             // ============================================================
-            // Update: directional light (animated sun)
+            // State updates
             // ============================================================
+
+            // Animate sun: direction rotates, color shifts warm↔cool with elevation
             {
-                float sunAngle  = static_cast<float>(currentTime) * 0.25f;
-                float elevation = std::sin(sunAngle);
+                const float angle = static_cast<float>(currentTime) * 0.25f;
+                const float elev  = std::sin(angle);
                 dirLight.direction = glm::normalize(glm::vec3(
-                    std::cos(sunAngle),
-                    -std::abs(elevation) - 0.1f,
-                    std::sin(sunAngle)
+                    std::cos(angle),
+                    -std::abs(elev) - 0.1f,
+                    std::sin(angle)
                 ));
-                float t = glm::clamp(std::abs(elevation), 0.0f, 1.0f);
-                glm::vec3 sunColor = glm::mix(
-                    glm::vec3(1.0f, 0.4f, 0.1f),   // horizon: warm orange
-                    glm::vec3(1.0f, 0.97f, 0.88f),  // zenith: cool white
+                const float t = glm::clamp(std::abs(elev), 0.0f, 1.0f);
+                const glm::vec3 sunColor = glm::mix(
+                    glm::vec3(1.0f, 0.4f, 0.1f),   // horizon — warm orange
+                    glm::vec3(1.0f, 0.97f, 0.88f),  // zenith  — cool white
                     t
                 );
-                float bright = glm::clamp(std::abs(elevation) * 1.2f, 0.05f, 1.0f);
+                const float bright = glm::clamp(std::abs(elev) * 1.2f, 0.05f, 1.0f);
                 dirLight.diffuse  = sunColor * bright * 0.8f;
                 dirLight.specular = sunColor * bright * 0.9f;
                 dirLight.ambient  = sunColor * 0.04f;
             }
 
-            // Update point light orbits
+            // Advance point-light orbits
             for (auto& pl : pointLights)
                 pl.orbitAngle += dt * pl.orbitSpeed;
 
-            // ============================================================
-            // Update: enemy chase (Task 2 — collision 2)
-            // ============================================================
+            // Enemy AI: chase camera (or glide back after a hit)
             {
                 if (enemy.hitCooldown > 0.0f) {
                     enemy.hitCooldown -= dt;
-                    // Glide away, decelerating quickly
-                    enemy.position += enemy.velocity * dt;
-                    enemy.velocity *= std::pow(0.05f, dt); // exponential decel
+                    enemy.position    += enemy.velocity * dt;
+                    enemy.velocity    *= std::pow(0.05f, dt); // exponential decel
                 } else {
-                    // Chase the camera (project direction onto XZ plane)
                     glm::vec3 toCamera = camera.Position - enemy.position;
                     toCamera.y = 0.0f;
-                    float len = glm::length(toCamera);
-                    if (len > 0.05f)
+                    if (glm::length(toCamera) > 0.05f)
                         enemy.velocity = glm::normalize(toCamera) * EnemyState::SPEED;
                     enemy.position += enemy.velocity * dt;
                 }
-                // Keep enemy on the floor and inside the map
-                enemy.position.y = enemy.radius;
+                enemy.position.y = enemy.radius;  // always on the floor
                 enemy.position.x = glm::clamp(enemy.position.x, -MAP_HALF_SIZE, MAP_HALF_SIZE);
                 enemy.position.z = glm::clamp(enemy.position.z, -MAP_HALF_SIZE, MAP_HALF_SIZE);
 
@@ -453,227 +508,157 @@ int App::run() {
                     enemy_model->setPosition(enemy.position);
             }
 
-            // ============================================================
-            // Update: camera movement with collision (Task 2 — collision 1)
-            // ============================================================
+            // Camera movement with floor + wall-sliding collision (Task 2 — col. 1)
             {
                 glm::vec3 delta  = camera.ProcessInput(window, dt);
                 glm::vec3 newPos = camera.Position + delta;
 
-                // Floor collision — camera can't descend below floor
-                const float minY = FLOOR_Y + CAMERA_RADIUS;
-                if (newPos.y < minY) newPos.y = minY;
+                // Floor: camera sphere cannot descend below FLOOR_Y
+                newPos.y = glm::max(newPos.y, FLOOR_Y + CAMERA_RADIUS);
 
-                // Wall sliding — if the new position in X is out of bounds,
-                // keep the old X so the player can still move in Z (slides
-                // along the wall instead of stopping completely).
+                // Walls: if the new position exits the map boundary on one
+                // axis, keep the old value for that axis only — the player
+                // can still slide along the wall on the other axis.
                 const float wall = MAP_HALF_SIZE - CAMERA_RADIUS;
-                if (newPos.x < -wall || newPos.x > wall)
-                    newPos.x = camera.Position.x;
-                if (newPos.z < -wall || newPos.z > wall)
-                    newPos.z = camera.Position.z;
+                if (newPos.x < -wall || newPos.x > wall) newPos.x = camera.Position.x;
+                if (newPos.z < -wall || newPos.z > wall) newPos.z = camera.Position.z;
 
                 camera.Position = newPos;
             }
 
-            // ============================================================
-            // Collision detection: camera-enemy sphere (Task 2 — collision 2)
-            // ============================================================
+            // Camera ↔ enemy sphere collision (Task 2 — col. 2)
             {
-                float dist = glm::distance(camera.Position, enemy.position);
+                const float dist = glm::distance(camera.Position, enemy.position);
                 if (dist < CAMERA_RADIUS + enemy.radius && enemy.hitCooldown <= 0.0f) {
+                    // Push camera out of the enemy sphere
+                    const glm::vec3 push = glm::normalize(camera.Position - enemy.position);
+                    camera.Position = enemy.position + push * (CAMERA_RADIUS + enemy.radius + 0.1f);
+                    camera.Position.y = glm::max(camera.Position.y, FLOOR_Y + CAMERA_RADIUS);
 
-                    // Push the camera out of the enemy sphere
-                    glm::vec3 pushDir  = glm::normalize(camera.Position - enemy.position);
-                    camera.Position    = enemy.position + pushDir * (CAMERA_RADIUS + enemy.radius + 0.1f);
-                    // Re-apply floor constraint after push
-                    if (camera.Position.y < FLOOR_Y + CAMERA_RADIUS)
-                        camera.Position.y = FLOOR_Y + CAMERA_RADIUS;
+                    // Emit orange particle burst at the contact point (Task 3)
+                    const glm::vec3 contact = enemy.position + push * enemy.radius;
+                    particle_system.emit(contact, glm::vec3(1.0f, 0.5f, 0.05f), 25, 4.5f, 1.8f);
 
-                    // Task 3: Emit orange particle burst at collision point
-                    glm::vec3 contactPt = enemy.position + pushDir * enemy.radius;
-                    particle_system.emit(contactPt, glm::vec3(1.0f, 0.5f, 0.05f), 25, 4.5f, 1.8f);
-
-                    // Bounce enemy back and put it on cooldown
-                    glm::vec3 away = -pushDir;
-                    away.y         = 0.0f;
+                    // Bounce the enemy back with a brief cooldown
+                    glm::vec3 away = -push;
+                    away.y = 0.0f;
                     enemy.velocity    = away * 3.5f;
                     enemy.hitCooldown = 2.5f;
 
-                    std::cout << "Enemy hit! Particles: " << particle_system.count() << "\n";
+                    std::cout << "Hit! Particles: " << particle_system.count() << "\n";
                 }
             }
 
-            // Task 3: Advance particle simulation
+            // Advance particle physics
             particle_system.update(dt);
 
             // ============================================================
-            // Render preparation
+            // Render
             // ============================================================
 
-            glm::mat4 view_matrix = camera.GetViewMatrix();
+            const glm::mat4 view = camera.GetViewMatrix();
 
-            // Upload lighting uniforms once (glProgramUniform* = no bind needed)
-            set_lighting_uniforms(shader_library.at("lighting"), view_matrix);
+            // Light uniforms are set once per frame using glProgramUniform*,
+            // which works without the shader being currently bound.
+            set_lighting_uniforms(shader_library.at("lighting"), view);
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // ============================================================
-            // ImGui
-            // ============================================================
+            // ---- ImGui ----
             if (show_imgui) {
                 ImGui_ImplOpenGL3_NewFrame();
                 ImGui_ImplGlfw_NewFrame();
                 ImGui::NewFrame();
 
                 ImGui::Begin("Scene");
-                ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+                ImGui::Text("FPS: %.1f",  ImGui::GetIO().Framerate);
                 ImGui::Text("Camera: (%.1f, %.1f, %.1f)",
                     camera.Position.x, camera.Position.y, camera.Position.z);
                 ImGui::Text("Enemy:  (%.1f, %.1f, %.1f)  CD: %.1f",
-                    enemy.position.x, enemy.position.y, enemy.position.z, enemy.hitCooldown);
+                    enemy.position.x, enemy.position.y, enemy.position.z,
+                    enemy.hitCooldown);
                 ImGui::Text("Particles: %zu", particle_system.count());
                 ImGui::Separator();
-
-                ImGui::Text("[H] Spotlight (headlight)");
                 bool headlight = spotLight.on;
-                if (ImGui::Checkbox("Headlight ON", &headlight))
+                if (ImGui::Checkbox("[H] Headlight", &headlight))
                     spotLight.on = headlight;
-
-                ImGui::Text("[Mouse wheel] FOV: %.0f", fov);
                 ImGui::Separator();
                 ImGui::Text("WASD + Space/Ctrl = move");
-                ImGui::Text("Walk into red sphere = hit!");
+                ImGui::Text("Walk into red sphere = collision!");
                 ImGui::End();
             }
 
-            // Window title
+            // Window title (once per second)
             if (currentTime - lastTime >= 1.0) {
-                double fps = frameCount / (currentTime - lastTime);
+                const double fps = frameCount / (currentTime - lastTime);
                 glfwSetWindowTitle(window,
-                    ("Alpha + Physics Demo - FPS: " + std::to_string(static_cast<int>(fps))).c_str());
+                    ("Alpha + Physics Demo — FPS: " +
+                     std::to_string(static_cast<int>(fps))).c_str());
                 frameCount = 0;
                 lastTime   = currentTime;
             }
 
             // ============================================================
-            // Draw helper — uploads per-object uniforms then draws all meshes
+            // Pass 1 — Opaque geometry
+            // Default GL state: depth write ON, depth test ON, blend OFF
             // ============================================================
-            auto draw_lit = [&](std::shared_ptr<Model>& mdl,
-                                const Material& mat,
-                                float alpha)
-            {
-                if (!mdl) return;
-                for (auto const& pkg : mdl->meshes) {
-                    pkg.shader->use();
-                    pkg.shader->setUniform("uP_m", projection_matrix);
-                    pkg.shader->setUniform("uV_m", view_matrix);
-
-                    glm::mat4 localM = Model::createModelMatrix(
-                        pkg.origin, pkg.eulerAngles, pkg.scale);
-                    pkg.shader->setUniform("uM_m", mdl->getModelMatrix() * localM);
-
-                    pkg.shader->setUniform("mat_ambient",   mat.ambient);
-                    pkg.shader->setUniform("mat_diffuse",   mat.diffuse);
-                    pkg.shader->setUniform("mat_specular",  mat.specular);
-                    pkg.shader->setUniform("mat_shininess", mat.shininess);
-                    pkg.shader->setUniform("mat_alpha",     alpha);
-
-                    if (pkg.texture) {
-                        pkg.texture->bind(0);
-                        pkg.shader->setUniform("tex0", 0);
-                    }
-                    pkg.mesh->draw();
-                }
-            };
-
-            // Predefined materials
-            const Material MAT_GROUND {
-                glm::vec3(0.25f),
-                glm::vec3(0.65f),
-                glm::vec3(0.05f),
-                4.0f
-            };
-            const Material MAT_BUNNY {
-                glm::vec3(0.15f),
-                glm::vec3(0.85f),
-                glm::vec3(0.10f),
-                16.0f
-            };
-            const Material MAT_SPHERE {
-                glm::vec3(0.15f),
-                glm::vec3(0.90f),
-                glm::vec3(0.70f),
-                64.0f
-            };
-            const Material MAT_ENEMY {
-                glm::vec3(0.2f,  0.04f, 0.04f),
-                glm::vec3(0.95f, 0.1f,  0.1f),
-                glm::vec3(0.8f,  0.3f,  0.3f),
-                32.0f
-            };
+            draw_model_lit(ground_model,  MAT_GROUND, view);
+            draw_model_lit(bunny_model,   MAT_BUNNY,  view);
+            draw_model_lit(sphere_model,  MAT_SPHERE, view);
+            draw_model_lit(enemy_model,   MAT_ENEMY,  view);
 
             // ============================================================
-            // Pass 1: Opaque objects
-            // (depth write ON, depth test ON, blending OFF — default state)
-            // ============================================================
-            draw_lit(ground,         MAT_GROUND, 1.0f);
-            draw_lit(model,          MAT_BUNNY,  1.0f);
-            draw_lit(textured_model, MAT_SPHERE, 1.0f);
-            draw_lit(enemy_model,    MAT_ENEMY,  1.0f);
-
-            // ============================================================
-            // Pass 2: Transparent objects — Task 1 (painter's algorithm)
+            // Pass 2 — Transparent objects (Task 1) + particles (Task 3)
             //
-            // Rules:
-            //  • Render AFTER all opaque objects so the depth buffer is full.
-            //  • Sort back-to-front so closer glass composites over farther.
-            //  • Disable depth writes so transparent surfaces don't occlude
-            //    each other (depth TEST stays on so they're hidden by opaque).
-            //  • Enable alpha blending: SRC_ALPHA / ONE_MINUS_SRC_ALPHA.
+            // Rules applied here (from lecture / sample alpha.cpp):
+            //  • Sort transparent objects back-to-front (painter's algorithm)
+            //    so closer glass composites on top of farther glass.
+            //  • glDepthMask(GL_FALSE): keep reading depth (transparent
+            //    objects hide behind opaque), stop writing depth (transparent
+            //    objects don't occlude each other erroneously).
+            //  • glBlendFunc(SRC_ALPHA, 1-SRC_ALPHA): standard alpha blend.
+            //  • Particles drawn in the same pass (same GL state).
+            //  • Restore depth mask and disable blend before the next frame.
             // ============================================================
             {
-                // Sort a local copy — don't modify the stored order
+                // Sort a local copy — the stored order is the add-order,
+                // not the render order, so we sort a cheap copy of shared_ptrs.
                 auto sorted = transparent_objects;
                 std::sort(sorted.begin(), sorted.end(),
-                    [&](const GlassObject& a, const GlassObject& b) {
-                        float da = glm::distance(camera.Position, a.model->getPosition());
-                        float db = glm::distance(camera.Position, b.model->getPosition());
-                        return da > db; // descending = back-to-front
+                    [&](const TransparentObject& a, const TransparentObject& b) {
+                        return glm::distance(camera.Position, a.model->getPosition())
+                             > glm::distance(camera.Position, b.model->getPosition());
                     });
 
                 glEnable(GL_BLEND);
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                glDepthMask(GL_FALSE); // keep reading depth, stop writing it
+                glDepthMask(GL_FALSE);
 
-                for (auto& go : sorted)
-                    draw_lit(go.model, go.mat, go.model->alpha);
+                for (const auto& obj : sorted)
+                    draw_model_lit(obj.model, obj.material, view, obj.model->alpha);
 
-                // ============================================================
-                // Pass 3: Particle system — Task 3
-                // Drawn inside the blended pass (same GL state: blend ON, depth write OFF)
-                // ============================================================
+                // Particles share the blended pass (they are also transparent)
                 if (!particle_system.empty())
-                    particle_system.draw(*shader_library.at("particle"),
-                                        view_matrix, projection_matrix);
+                    particle_system.draw(*shader_library.at("particle"), view, projection_matrix);
 
                 glDepthMask(GL_TRUE);
                 glDisable(GL_BLEND);
             }
 
-            if (FPS.is_updated())
-                std::cout << "FPS: " << FPS.get() << "\n";
-
+            // ---- Finalize ImGui ----
             if (show_imgui) {
                 ImGui::Render();
                 ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             }
 
+            if (FPS.is_updated())
+                std::cout << "FPS: " << FPS.get() << "\n";
+
             glfwSwapBuffers(window);
             FPS.update();
         }
     }
-    catch (std::exception const& e) {
+    catch (const std::exception& e) {
         std::cerr << "App failed: " << e.what() << "\n";
         return EXIT_FAILURE;
     }
@@ -688,10 +673,9 @@ int App::run() {
 
 void App::update_projection_matrix() {
     if (height < 1) height = 1;
-    float ratio = static_cast<float>(width) / height;
     projection_matrix = glm::perspective(
         glm::radians(fov),
-        ratio,
+        static_cast<float>(width) / height,
         0.1f,
         20000.0f
     );
@@ -699,44 +683,42 @@ void App::update_projection_matrix() {
 
 void App::toggle_fullscreen(GLFWwindow* win) {
     if (isFullScreen) {
-        glfwSetWindowMonitor(win, nullptr, savedXPos, savedYPos, savedWidth, savedHeight, GLFW_DONT_CARE);
+        glfwSetWindowMonitor(win, nullptr,
+            savedXPos, savedYPos, savedWidth, savedHeight, GLFW_DONT_CARE);
         isFullScreen = false;
     } else {
-        glfwGetWindowPos(win,  &savedXPos,  &savedYPos);
-        glfwGetWindowSize(win, &savedWidth, &savedHeight);
+        glfwGetWindowPos (win, &savedXPos,   &savedYPos);
+        glfwGetWindowSize(win, &savedWidth,  &savedHeight);
         GLFWmonitor*       monitor = GetCurrentMonitor(win);
         const GLFWvidmode* mode    = glfwGetVideoMode(monitor);
-        glfwSetWindowMonitor(win, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+        glfwSetWindowMonitor(win, monitor, 0, 0,
+            mode->width, mode->height, mode->refreshRate);
         isFullScreen = true;
     }
 }
 
 GLFWmonitor* App::GetCurrentMonitor(GLFWwindow* win) {
-    int monitorCount;
+    int monitorCount = 0;
     GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
     if (!monitors) return glfwGetPrimaryMonitor();
 
-    int windowX, windowY, windowWidth, windowHeight;
-    glfwGetWindowPos(win,  &windowX,     &windowY);
-    glfwGetWindowSize(win, &windowWidth, &windowHeight);
+    int wx, wy, ww, wh;
+    glfwGetWindowPos (win, &wx, &wy);
+    glfwGetWindowSize(win, &ww, &wh);
 
-    GLFWmonitor* bestMonitor = nullptr;
-    int          bestOverlap = 0;
+    GLFWmonitor* best     = nullptr;
+    int          bestArea = 0;
 
-    for (int i = 0; i < monitorCount; i++) {
-        GLFWmonitor* monitor = monitors[i];
+    for (int i = 0; i < monitorCount; ++i) {
         int mx, my;
-        glfwGetMonitorPos(monitor, &mx, &my);
-        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        glfwGetMonitorPos(monitors[i], &mx, &my);
+        const GLFWvidmode* mode = glfwGetVideoMode(monitors[i]);
         if (!mode) continue;
 
-        int ox = std::max(0, std::min(windowX + windowWidth,  mx + mode->width)  - std::max(windowX, mx));
-        int oy = std::max(0, std::min(windowY + windowHeight, my + mode->height) - std::max(windowY, my));
-        int area = ox * oy;
-        if (area > bestOverlap) {
-            bestOverlap  = area;
-            bestMonitor = monitor;
-        }
+        const int ox   = std::max(0, std::min(wx + ww, mx + mode->width)  - std::max(wx, mx));
+        const int oy   = std::max(0, std::min(wy + wh, my + mode->height) - std::max(wy, my));
+        const int area = ox * oy;
+        if (area > bestArea) { bestArea = area; best = monitors[i]; }
     }
-    return bestMonitor ? bestMonitor : glfwGetPrimaryMonitor();
+    return best ? best : glfwGetPrimaryMonitor();
 }

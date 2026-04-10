@@ -1,8 +1,8 @@
 #pragma once
 
 #include <algorithm>
-#include <cstdlib>
 #include <memory>
+#include <random>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -13,76 +13,69 @@
 #include "ShaderProgram.hpp"
 
 // ============================================================
-// Single particle data
+// Single particle — position/velocity/color/lifetime.
 // ============================================================
-
 struct Particle {
     glm::vec3 position;
     glm::vec3 velocity;
     glm::vec3 color;
-    float     lifetime;
-    float     maxLifetime;
+    float     lifetime;     // remaining seconds
+    float     maxLifetime;  // total seconds at spawn
 };
 
 // ============================================================
 // Particle system
 //
+// Uses a shared mesh (e.g. tetrahedron) for all particles so
+// GPU memory stays constant regardless of particle count.
+//
 // Usage:
-//   1. Call init() with a shared mesh (tetrahedron, point, etc.)
-//   2. Call emit() when an event fires (collision, explosion, etc.)
-//   3. Call update(dt) every frame
-//   4. Call draw() inside the transparent/blended render pass
+//   1. init(mesh)          — assign the shared draw mesh
+//   2. emit(...)           — fire a burst on a game event
+//   3. update(dt)          — call once per frame
+//   4. draw(shader, V, P)  — call inside the blended pass
 // ============================================================
-
 class ParticleSystem {
 public:
-    static constexpr float GRAVITY     = -9.8f;   // m/s²
-    static constexpr float FLOOR_Y     = 0.02f;   // bounce plane
-    static constexpr float BOUNCE_DAMP = 0.45f;   // energy kept on Y-bounce
-    static constexpr float LATERAL_DAMP = 0.88f;  // energy kept on XZ-bounce
-    static constexpr float PARTICLE_SIZE = 0.08f; // scale of each tetrahedron
+    // Physics constants
+    static constexpr float GRAVITY      = -9.8f;
+    static constexpr float FLOOR_Y      =  0.02f;
+    static constexpr float BOUNCE_DAMP  =  0.45f;   // Y energy kept on bounce
+    static constexpr float LATERAL_DAMP =  0.88f;   // XZ friction on bounce
+    static constexpr float DRAW_SCALE   =  0.08f;   // uniform scale of each particle
 
-    // Assign the shared mesh used to draw every particle
+    // Assign the mesh drawn for every particle (call once at startup).
     void init(std::shared_ptr<Mesh> mesh) {
         mesh_ = std::move(mesh);
     }
 
-    // Spawn `count` particles at `origin` with given color/speed/lifetime
+    // Spawn `count` particles at `origin`.
+    // `speed`    — initial speed magnitude (units/s)
+    // `lifetime` — mean lifetime in seconds (varied ±40 % per particle)
     void emit(const glm::vec3& origin,
               const glm::vec3& color,
               int   count,
               float speed,
               float lifetime = 1.5f)
     {
+        particles_.reserve(particles_.size() + count);
         for (int i = 0; i < count; ++i) {
             Particle p;
             p.position    = origin;
             p.color       = color;
-            // Vary lifetime slightly so particles don't all die at once
-            p.maxLifetime = lifetime * (0.6f + 0.8f * rf());
+            p.maxLifetime = lifetime * (0.6f + 0.8f * unit_rand());
             p.lifetime    = p.maxLifetime;
-
-            // Random direction on upper hemisphere (bias upward for
-            // a natural "burst" effect)
-            float theta = rf() * 2.0f * glm::pi<float>();
-            float phi   = rf() * glm::half_pi<float>(); // 0..π/2 → upper only
-            float s     = speed * (0.4f + 0.6f * rf());
-            p.velocity = glm::vec3(
-                glm::sin(phi) * glm::cos(theta) * s,
-                glm::cos(phi) * s,
-                glm::sin(phi) * glm::sin(theta) * s
-            );
+            p.velocity    = random_upper_hemisphere(speed);
             particles_.push_back(p);
         }
     }
 
-    // Advance simulation by dt seconds
+    // Step physics by dt seconds; remove dead particles.
     void update(float dt) {
         for (auto& p : particles_) {
             p.velocity.y += GRAVITY * dt;
             p.position   += p.velocity * dt;
 
-            // Bounce on floor
             if (p.position.y < FLOOR_Y) {
                 p.position.y  = FLOOR_Y;
                 p.velocity.y  = -p.velocity.y * BOUNCE_DAMP;
@@ -93,16 +86,13 @@ public:
             p.lifetime -= dt;
         }
 
-        // Erase dead particles
-        particles_.erase(
-            std::remove_if(particles_.begin(), particles_.end(),
-                [](const Particle& p) { return p.lifetime <= 0.0f; }),
-            particles_.end()
-        );
+        std::erase_if(particles_, [](const Particle& p) {
+            return p.lifetime <= 0.0f;
+        });
     }
 
-    // Draw all live particles using the particle shader.
-    // Must be called inside a blending-enabled render pass.
+    // Render all live particles.  Must be called with blending enabled.
+    // Expects uniforms: uM_m, uV_m, uP_m, uColor (vec4).
     void draw(ShaderProgram& shader,
               const glm::mat4& V,
               const glm::mat4& P) const
@@ -114,12 +104,10 @@ public:
         shader.setUniform("uP_m", P);
 
         for (const auto& p : particles_) {
-            // Fade out as lifetime approaches 0
-            float alpha = glm::max(p.lifetime / p.maxLifetime, 0.0f);
-
-            glm::mat4 M = glm::scale(
+            const float alpha = glm::max(p.lifetime / p.maxLifetime, 0.0f);
+            const glm::mat4 M = glm::scale(
                 glm::translate(glm::mat4(1.0f), p.position),
-                glm::vec3(PARTICLE_SIZE)
+                glm::vec3(DRAW_SCALE)
             );
             shader.setUniform("uM_m",   M);
             shader.setUniform("uColor", glm::vec4(p.color, alpha));
@@ -127,15 +115,30 @@ public:
         }
     }
 
-    bool   empty() const { return particles_.empty(); }
-    size_t count() const { return particles_.size(); }
+    [[nodiscard]] bool   empty() const { return particles_.empty(); }
+    [[nodiscard]] size_t count() const { return particles_.size(); }
 
 private:
     std::vector<Particle> particles_;
     std::shared_ptr<Mesh> mesh_;
 
-    // [0, 1) uniform random float
-    static float rf() {
-        return static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+    // Seeded once per system — no global state, no race conditions.
+    std::mt19937 rng_{std::random_device{}()};
+    std::uniform_real_distribution<float> dist_{0.0f, 1.0f};
+
+    // [0, 1) uniform float
+    float unit_rand() { return dist_(rng_); }
+
+    // Random direction on the upper hemisphere, scaled by `speed`
+    // (±40 % speed variance for a natural burst spread).
+    glm::vec3 random_upper_hemisphere(float speed) {
+        const float theta = unit_rand() * 2.0f * glm::pi<float>();
+        const float phi   = unit_rand() * glm::half_pi<float>();
+        const float s     = speed * (0.6f + 0.8f * unit_rand());
+        return {
+            glm::sin(phi) * glm::cos(theta) * s,
+            glm::cos(phi) * s,
+            glm::sin(phi) * glm::sin(theta) * s,
+        };
     }
 };
