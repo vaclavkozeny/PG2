@@ -505,15 +505,17 @@ void App::resolve_collisions(float prev_feet_y) {
         const float pz1 = player.feet.z - R, pz2 = player.feet.z + R;
 
         // Quick AABB rejection
+        // Note: Y uses strict > so that feet exactly at block-top still
+        // triggers the grounded snap instead of being silently skipped.
         if (px2 <= bx1 || px1 >= bx2) continue;
-        if (py2 <= by1 || py1 >= by2) continue;
+        if (py2 <= by1 || py1 >  by2) continue;
         if (pz2 <= bz1 || pz1 >= bz2) continue;
 
         // Determine resolution axis from previous position
         const bool came_from_above = prev_feet_y        >= by2 - 0.02f;
         const bool came_from_below = prev_feet_y + H    <= by1 + 0.02f;
 
-        if (came_from_above && player.vel_y <= 0.01f) {
+        if (came_from_above && player.vel_y <= 0.05f) {
             // Landing on top of block
             player.feet.y   = by2;
             player.vel_y    = 0.0f;
