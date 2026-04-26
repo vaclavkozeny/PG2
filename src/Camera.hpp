@@ -39,7 +39,14 @@ public:
         return glm::lookAt(this->Position, this->Position + this->Front, this->Up);
     }
 
-    // Processes input received from any keyboard-like input system. 
+    // Set orientation directly (useful for initial spawn direction).
+    void SetOrientation(GLfloat yaw_deg, GLfloat pitch_deg = 0.0f) {
+        Yaw   = yaw_deg;
+        Pitch = pitch_deg;
+        updateCameraVectors();
+    }
+
+    // Processes input received from any keyboard-like input system.
     // Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
     glm::vec3 ProcessInput(GLFWwindow* window, GLfloat deltaTime) {
         glm::vec3 direction{0};

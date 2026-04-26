@@ -31,6 +31,7 @@ struct PointLight {
     float quadratic{0.032f};
 
     // Orbit parameters — updated each frame from App::run()
+    glm::vec3 orbitCenter{0.0f};  // world-space centre of the orbit
     float orbitRadius{3.0f};
     float orbitHeight{0.0f};
     float orbitSpeed {1.0f};
@@ -38,7 +39,7 @@ struct PointLight {
 
     // Returns the current world-space position based on the orbit state.
     [[nodiscard]] glm::vec3 worldPosition() const {
-        return {
+        return orbitCenter + glm::vec3{
             orbitRadius * glm::cos(orbitAngle),
             orbitHeight,
             orbitRadius * glm::sin(orbitAngle),

@@ -42,6 +42,8 @@ set(PROJECT_SOURCES
     src/Texture.cpp
     src/Texture.hpp
     src/Particle.hpp
+    src/Player.hpp
+    src/Level.hpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
