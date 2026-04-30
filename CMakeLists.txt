@@ -21,6 +21,11 @@ elseif(UNIX)
 endif()
 
 set(PROJECT_SOURCES
+    texture.hpp
+    texture.cpp
+    camera.hpp
+    OBJloader.cpp
+    OBJloader.hpp
     meshgen.cpp
     model.hpp
     mesh.hpp

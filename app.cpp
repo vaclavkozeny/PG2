@@ -5,9 +5,13 @@
 #include <chrono>
 #include <stack>
 #include <random>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+#include <array>
 
 #include <opencv2/opencv.hpp>
-#include <GL/glew.h> 
+#include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -16,6 +20,7 @@
 #include "assets.hpp"
 #include "getinfo.hpp"
 #include "gl_err_callback.h"
+#include "lights.hpp"
 
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -47,6 +52,8 @@ bool App::init()
         // GL init
         init_gl();
         init_assets();
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthFunc(GL_LEQUAL);
         init_imgui();
         glfwShowWindow(window);
     }
@@ -64,37 +71,46 @@ void error_callback(int error, const char* description) {
     std::cerr << "Error: " << description << std::endl;
 }
 void App::init_assets(void) {
-    shader_library.emplace("simple_shader", std::make_shared<shader_program>((std::filesystem::path)"basic.vert",(std::filesystem::path)"basic.frag"));
-    shader_library.emplace("rainbow", std::make_shared<shader_program>((std::filesystem::path)"basic.vert",(std::filesystem::path)"GL_rainbow.frag")); 
-    
-    mesh_library.emplace("cube", generateCube());
+    shader_library.emplace("simple_shader", std::make_shared<shader_program>((std::filesystem::path)"basic_core.vert",(std::filesystem::path)"basic.frag"));
+    shader_library.emplace("rainbow", std::make_shared<shader_program>((std::filesystem::path)"basic_core.vert",(std::filesystem::path)"GL_rainbow.frag"));
+    shader_library.emplace("texture", std::make_shared<shader_program>((std::filesystem::path)"tex.vert",(std::filesystem::path)"tex.frag"));
+
+    shader_library.emplace("lighting", std::make_shared<shader_program>((std::filesystem::path)"lighting.vert",(std::filesystem::path)"lighting.frag"));
+
+
+    texture_library.emplace("wood_box", std::make_shared<Texture>((std::filesystem::path)"box_rgb888.png"));
+    texture_library.emplace("mix", std::make_shared<Texture>((std::filesystem::path)"tex_1024.jpg"));
+
+    //mesh_library.emplace("cube", generateCube());
     //mesh_library.emplace("sphere", generateSphere(36, 18));
-    Model m;
-    m.addMesh(mesh_library.at("cube"), shader_library.at("rainbow"));
-    //m.addMesh(mesh_library.at("sphere"), shader_library.at("rainbow"));
-    scene.emplace("my_complex_object", m); 
 
-    // 
-    // Create and load data into GPU using OpenGL DSA (Direct State Access)
-    //
-    
-    // Create VAO + data description (similar to container)
-    glCreateVertexArrays(1, &VAO_ID);
+    Model myModel((std::filesystem::path)"teapot.obj", shader_library.at("lighting"), texture_library.at("wood_box"));
+    myModel.setScale(glm::vec3(0.3f)); // scale down the teapot
+    scene.emplace("teapot_object", myModel);
 
-    GLuint pos_loc = Mesh::attribute_location_position;
+    const float floor_y = 0.0f;
+    const float floor_half_size = 40.0f;
+    std::vector<vertex> floor_vertices{
+        {{-floor_half_size, floor_y, -floor_half_size}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{ floor_half_size, floor_y,  floor_half_size}, {0.0f, 1.0f, 0.0f}, {40.0f, 40.0f}},
+        {{ floor_half_size, floor_y, -floor_half_size}, {0.0f, 1.0f, 0.0f}, {40.0f, 0.0f}},
+        {{-floor_half_size, floor_y, -floor_half_size}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{-floor_half_size, floor_y,  floor_half_size}, {0.0f, 1.0f, 0.0f}, {0.0f, 40.0f}},
+        {{ floor_half_size, floor_y,  floor_half_size}, {0.0f, 1.0f, 0.0f}, {40.0f, 40.0f}},
+    };
+    auto floor_mesh = std::make_shared<Mesh>(floor_vertices, GL_TRIANGLES);
+    Model floor_model;
+    floor_model.addMesh(floor_mesh, shader_library.at("lighting"), texture_library.at("wood_box"));
+    scene.emplace("floor_object", floor_model);
 
-    glEnableVertexArrayAttrib(VAO_ID, pos_loc);
-    glVertexArrayAttribFormat(VAO_ID, pos_loc, glm::vec3::length(), GL_FLOAT, GL_FALSE, offsetof(vertex, position));
-    glVertexArrayAttribBinding(VAO_ID, pos_loc, 0);
+    Model bunny_model((std::filesystem::path)"bunny.obj", shader_library.at("lighting"), texture_library.at("mix"));
+    bunny_model.setPosition(glm::vec3(8.0f, 0.0f, 0.0f));
+    bunny_model.is_transparent = true;
+    scene.emplace("bunny_object", bunny_model);
 
-    // Create and fill data
-    glCreateBuffers(1, &VBO_ID);
-    glNamedBufferData(VBO_ID, triangle_vertices.size()*sizeof(vertex), triangle_vertices.data(), GL_STATIC_DRAW);
 
-    // Connect together
-    glVertexArrayVertexBuffer(VAO_ID, 0, VBO_ID, 0, sizeof(vertex)); // (GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride)
 
-}
+    }
 void App::init_gl(void){
     load_config("config.json");
     //std::cout << config.title << "\n";
@@ -105,6 +121,7 @@ void App::init_gl(void){
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_SAMPLES, 4);
 
 	// open window, but hidden - it will be enabled later, after asset initialization
 	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
@@ -112,16 +129,19 @@ void App::init_gl(void){
 
     //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     // open window (GL canvas) with no special properties
-    window = glfwCreateWindow(800, 600, "OpenGL context", NULL, NULL);
+    window = glfwCreateWindow(config.width, config.height, config.title.c_str(), NULL, NULL);
     if (!window)
         throw std::runtime_error("GLFW window init failed");
     glfwMakeContextCurrent(window);
-    
+    glfwGetFramebufferSize(window, &width, &height);
     glfwSetWindowUserPointer(window, this);
     glfwSetKeyCallback(window, key_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetScrollCallback(window, scroll_callback);
-    glfwSwapInterval(0);
+    glfwSetFramebufferSizeCallback(window, fbsize_callback);    // On GL framebuffer resize callback.
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetCursorPosCallback(window, cursorPositionCallback);
+    glfwSwapInterval(vsync_enabled ? 1 : 0); // vsync on/off
     // init glew
     auto glew = glewInit();
     if (glew != GLEW_OK)
@@ -133,23 +153,23 @@ void App::init_gl(void){
     {
         glDebugMessageCallback(MessageCallback, 0);
         glEnable(GL_DEBUG_OUTPUT);
-        
+
         //default is asynchronous debug output, use this to simulate glGetError() functionality
         //glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        
+
         std::cout << "GL_DEBUG enabled." << std::endl;
     }
     else
         std::cout << "GL_DEBUG NOT SUPPORTED!" << std::endl;
-        
+
     auto h = getInfo();
     std::cout << h.vendor << "\n" << h.renderer << "\n" << h.version << "\n" << h.glsl << std::endl;
-    std::cout << getProfile() << std::endl;   
+    std::cout << getProfile() << std::endl;
 }
 void App::init_imgui()
 {
 	// see https://github.com/ocornut/imgui/wiki/Getting-Started
-	
+
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -162,79 +182,167 @@ void App::init_imgui()
 // ========================================================================= //
 int App::run(void)
 {
-    GLfloat r,g,b,a;
-    r=g=b=a=1.0f; //white color
-
-    // Activate shader program. There is only one program, so activation can be out of the loop. 
+    update_projection_matrix();
+    glViewport(0, 0, width, height);
+    // Activate shader program. There is only one program, so activation can be out of the loop.
     // In more realistic scenarios, you will activate different shaders for different 3D objects.
     glUseProgram(shader_prog_ID);
-
-    // Get uniform location in GPU program. This will not change, so it can be moved out of the game loop.
-    GLint uniform_color_location = glGetUniformLocation(shader_prog_ID, "uniform_Color");
-    if (uniform_color_location == -1) {
-        std::cerr << "Uniform location is not found in active shader program. Did you forget to activate it?\n";
+    glEnable(GL_DEPTH_TEST);
+    if (msaa_enabled) {
+        glEnable(GL_MULTISAMPLE);
+    } else {
+        glDisable(GL_MULTISAMPLE);
     }
-    
+    glEnable(GL_CULL_FACE);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // get first position of mouse cursor
+    glfwGetCursorPos(window, &cursorLastX, &cursorLastY);
     fps_meter FPS;
+    const glm::vec3 teapot_center{0.05425f, 0.39375f, 0.0f};
+    camera.Position = teapot_center + glm::vec3(0.0f, 3.0f, 12.0f);
+    camera.LookAt(teapot_center);
+    double last_frame_time = glfwGetTime();
+
+    // Setup lighting
+    LightingSetup lighting_setup;
+    lighting_setup.use_directional_light = true;   // Task 1: Use directional light (sun)
+    lighting_setup.use_point_lights = false;
+    lighting_setup.num_point_lights = 0;
+
+    // Configure directional light (sun)
+    lighting_setup.directional_light = DirectionalLight(
+        glm::vec3(0.0f, -1.0f, 0.0f),  // Initial direction (straight down)
+        glm::vec3(1.0f, 1.0f, 1.0f),   // Initial color (white)
+        1.0f                            // Intensity
+    );
+
+    // Configure material properties
+    lighting_setup.material = MaterialProperties(
+        glm::vec3(1.0f),  // ambient
+        glm::vec3(1.0f),  // diffuse
+        glm::vec3(1.0f),  // specular
+        32.0f             // shininess
+    );
+
+    // Configure light intensities
+    lighting_setup.light_intensity = LightIntensity(
+        glm::vec3(0.6f),  // ambient intensity
+        glm::vec3(0.6f),  // diffuse intensity
+        glm::vec3(0.35f)  // specular intensity
+    );
+
     try {
         while (!glfwWindowShouldClose(window)) {
             GLfloat t = glfwGetTime();
+            //auto current_shader = shader_library.at("texture"); // crated a copy of shared pointer. Shader is guaranteed to live.
+            //current_shader->use();
 
-            auto current_shader = shader_library.at("rainbow"); // crated a copy of shared pointer. Shader is guaranteed to live.
-            current_shader->use();
-            
+            // Process camera input BEFORE ImGui so it always works
+            double now = glfwGetTime();
+            double delta_t = now - last_frame_time;
+            last_frame_time = now;
+            camera.Position += camera.ProcessInput(window, delta_t); // process keys etc.
 
             if (show_imgui) {
 				ImGui_ImplOpenGL3_NewFrame();
 				ImGui_ImplGlfw_NewFrame();
 				ImGui::NewFrame();
-				//ImGui::ShowDemoWindow(); // Enable mouse when using Demo!
+				// Don't let ImGui capture keyboard so camera controls always work
+				//ImGui::GetIO().WantCaptureKeyboard = false;
 				ImGui::SetNextWindowPos(ImVec2(10, 10));
 				ImGui::SetNextWindowSize(ImVec2(250, 100));
 
-				ImGui::Begin("Info", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+				ImGui::Begin("Info", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
 				ImGui::Text("V-Sync: %s", vsync_enabled ? "ON" : "OFF");
+                ImGui::Text("MSAA: %s", msaa_enabled ? "ON" : "OFF");
 				ImGui::Text("FPS: %.1f", FPS.get());
 				ImGui::Text("(press RMB to release mouse)");
-				ImGui::Text("(hit G to show/hide info)");
+                ImGui::Text("(hit G to show/hide info, M to toggle MSAA) tetst");
 				ImGui::End();
 			}
-            triangle_r = (float)(sin(t * 1.0f) * 0.5 + 0.5); 
-            triangle_g = (float)(sin(t * 1.3f) * 0.5 + 0.5); 
-            triangle_b = (float)(sin(t * 1.7f) * 0.5 + 0.5);
-
-            current_shader->setUniform("iTime", t);
-
+            //current_shader->setUniform("iTime", t);
             // clear canvas
             glClearColor(bg_r,bg_g,bg_b,0.5f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            // set uniforms for shader
+            auto lighting = shader_library.at("lighting");
 
-            //scene.at("my_complex_object").origin += glm::vec3(0.1, 0.0, 0.0); // move it slightly
-            
-            // draw all models in the scene
-            for (auto& model : scene) {
-                //model.second.update(t);
-                model.second.draw();
+            lighting->setUniform("uV_m", camera.GetViewMatrix());
+            lighting->setUniform("uP_m", projection_matrix);
+
+            // Animate directional light (sun) - Task 1
+            // Sun moves across the sky (simulate time of day)
+            float sun_time = fmod(t, 20.0f) / 20.0f;  // Cycle every 20 seconds
+            float sun_angle_horizontal = sun_time * 2.0f * glm::pi<float>(); // Full circle
+            float sun_angle_vertical = glm::sin(sun_time * glm::pi<float>()) * glm::pi<float>() * 0.4f; // Varies from -0.4π to +0.4π
+
+            // Calculate sun direction in world space
+            glm::vec3 sun_direction(
+                std::sin(sun_angle_horizontal) * std::cos(sun_angle_vertical),
+                -std::cos(sun_angle_vertical),  // Negative because light direction points "down"
+                std::cos(sun_angle_horizontal) * std::cos(sun_angle_vertical)
+            );
+
+            lighting_setup.directional_light.direction = sun_direction;
+
+            // Transform light direction to view space
+            glm::vec3 light_direction_view = glm::normalize(glm::vec3(
+                camera.GetViewMatrix() * glm::vec4(lighting_setup.directional_light.direction, 0.0f)
+            ));
+
+            // Set lighting uniforms
+            lighting->setUniform("use_directional_light", lighting_setup.use_directional_light);
+            lighting->setUniform("use_point_lights", lighting_setup.use_point_lights);
+            lighting->setUniform("num_point_lights", lighting_setup.num_point_lights);
+
+            if (lighting_setup.use_directional_light) {
+                lighting->setUniform("light_direction", light_direction_view);
             }
-            //set uniform parameter for shader
-            // (try to change the color in key callback)          
-            //glUniform4f(uniform_color_location, triangle_r, triangle_g, triangle_b, a);
-            
-            /*
-            //bind 3d object data
-            glBindVertexArray(VAO_ID);
 
-            // draw all VAO data
-            glDrawArrays(GL_TRIANGLES, 0, triangle_vertices.size());
-            */
+            // Set material and light intensity uniforms
+            lighting->setUniform("ambient_intensity", lighting_setup.light_intensity.ambient);
+            lighting->setUniform("diffuse_intensity", lighting_setup.light_intensity.diffuse);
+            lighting->setUniform("specular_intensity", lighting_setup.light_intensity.specular);
+            lighting->setUniform("specular_shinines", lighting_setup.material.shininess);
+            lighting->setUniform("ambient_material", lighting_setup.material.ambient);
+            lighting->setUniform("diffuse_material", lighting_setup.material.diffuse);
+            lighting->setUniform("specular_material", lighting_setup.material.specular);
+
+            std::vector<Model*> transparent_models;
+            transparent_models.reserve(scene.size());
+
+            // Opaque pass + collect transparent objects
+            lighting->setUniform("uAlpha", 1.0f);
+            for (auto& [name, model] : scene) {
+                if (model.is_transparent) {
+                    transparent_models.emplace_back(&model);
+                    continue;
+                }
+                model.draw();
+            }
+
+            // Transparent pass (back-to-front)
+            std::sort(transparent_models.begin(), transparent_models.end(), [&](Model* a, Model* b) {
+                return glm::distance(camera.Position, a->getPosition()) > glm::distance(camera.Position, b->getPosition());
+            });
+
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask(GL_FALSE);
+            lighting->setUniform("uAlpha", 0.7f);
+            for (auto* model : transparent_models) {
+                model->draw();
+            }
+            glDepthMask(GL_TRUE);
+            glDisable(GL_BLEND);
             // poll events, call callbacks, flip back<->front buffer
             glfwPollEvents();
             if (show_imgui) {
 				ImGui::Render();
 				ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 			}
-            glfwSwapBuffers(window);  
-            FPS.update();  
+            glfwSwapBuffers(window);
+            FPS.update();
         }
     }
     catch (std::exception const& e) {
@@ -254,7 +362,7 @@ void App::key_callback(GLFWwindow* window, int key, int scancode, int action, in
     if(action == GLFW_PRESS){
         switch (key)
         {
-        case GLFW_KEY_ESCAPE: 
+        case GLFW_KEY_ESCAPE:
             glfwSetWindowShouldClose(window, GLFW_TRUE);
             break;
         case GLFW_KEY_V:
@@ -264,8 +372,19 @@ void App::key_callback(GLFWwindow* window, int key, int scancode, int action, in
         case GLFW_KEY_G:
             app->show_imgui = !app->show_imgui;
             break;
+        case GLFW_KEY_M:
+            app->msaa_enabled = !app->msaa_enabled;
+            if (app->msaa_enabled) {
+                glEnable(GL_MULTISAMPLE);
+            } else {
+                glDisable(GL_MULTISAMPLE);
+            }
+            break;
         case GLFW_KEY_F11:
             app->toggle_fullscreen(window);
+            break;
+        case GLFW_KEY_PRINT_SCREEN:
+            app->save_screenshot();
             break;
         default:
             break;
@@ -273,7 +392,7 @@ void App::key_callback(GLFWwindow* window, int key, int scancode, int action, in
     }
 }
 void App::mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-    //App* app = (App*)glfwGetWindowUserPointer(window);
+    App* app = (App*)(glfwGetWindowUserPointer(window));
     if (action == GLFW_PRESS) {
 		switch (button) {
 		case GLFW_MOUSE_BUTTON_LEFT: {
@@ -281,6 +400,7 @@ void App::mouse_button_callback(GLFWwindow* window, int button, int action, int 
 			if (mode == GLFW_CURSOR_NORMAL) {
 				// we are outside of application, catch the cursor
 				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                glfwGetCursorPos(window, &app->cursorLastX, &app->cursorLastY);
 			}
 			else {
 				std::cout << "Bang!\n";
@@ -296,8 +416,39 @@ void App::mouse_button_callback(GLFWwindow* window, int button, int action, int 
 		}
 	}
 }
-void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    App* app = (App*)glfwGetWindowUserPointer(window);
+void App::scroll_callback(GLFWwindow * window, double xoffset, double yoffset)
+{
+    // get App instance
+    App* app = (App*)(glfwGetWindowUserPointer(window));
+    app->fov += 10*yoffset; // yoffset is mostly +1 or -1; one degree difference in fov is not visible
+    app->fov = std::clamp(app->fov, 20.0f, 170.0f); // limit FOV to reasonable values...
+
+    app->update_projection_matrix();
+}
+void App::fbsize_callback(GLFWwindow* window, int width, int height)
+{
+    App* app = (App*)(glfwGetWindowUserPointer(window));
+    app->width = width;
+    app->height = height;
+
+    // set viewport
+    glViewport(0, 0, width, height);
+    //now your canvas has [0,0] in bottom left corner, and its size is [width x height]
+
+    app->update_projection_matrix();
+}
+void App::cursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
+    auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
+
+    if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL) {
+        app->cursorLastX = xpos;
+        app->cursorLastY = ypos;
+        return;
+    }
+
+    app->camera.ProcessMouseMovement(xpos - app->cursorLastX, (ypos - app->cursorLastY) * -1.0);
+    app->cursorLastX = xpos;
+    app->cursorLastY = ypos;
 }
 // ========================================================================= //
 //                              HELPER FUNCTIONS                             //
@@ -317,7 +468,10 @@ void App::load_config(std::string filename) {
         config.height = j["window"].value("height", 600);
         config.title = j["window"].value("title", "OpenGL Window");
         config.vsync = j["window"].value("vsync", false);
-    } 
+        config.msaa = j["window"].value("msaa", false);
+        vsync_enabled = config.vsync;
+        msaa_enabled = config.msaa;
+    }
     catch (const json::parse_error& e) {
         std::cerr << "JSON parse error: " << e.what() << "\n";
     }
@@ -339,7 +493,7 @@ GLFWmonitor* App::GetCurrentMonitor(GLFWwindow* window) {
     //find best overlap
     for (int i = 0; i < monitorCount; i++) {
         GLFWmonitor* monitor = monitors[i];
-        
+
         int monitorX, monitorY;
         glfwGetMonitorPos(monitor, &monitorX, &monitorY);
         const GLFWvidmode* mode = glfwGetVideoMode(monitor);
@@ -377,6 +531,58 @@ void App::toggle_fullscreen(GLFWwindow* window) {
         isFullScreen = true;
     }
 }
+void App::update_projection_matrix(void)
+{
+    if (height < 1)
+        height = 1;   // avoid division by 0
+
+    float ratio = static_cast<float>(width) / height;
+
+    projection_matrix = glm::perspective(
+        glm::radians(fov),   // The vertical Field of View, in radians: the amount of "zoom". Think "camera lens". Usually between 90� (extra wide) and 30� (quite zoomed in)
+        ratio,               // Aspect Ratio. Depends on the size of your window.
+        0.1f,                // Near clipping plane. Keep as big as possible, or you'll get precision issues.
+        20000.0f             // Far clipping plane. Keep as little as possible.
+    );
+}
+void App::save_screenshot(void)
+{
+    int fbWidth = 0;
+    int fbHeight = 0;
+    glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+    if (fbWidth <= 0 || fbHeight <= 0) {
+        std::cerr << "Screenshot failed: invalid framebuffer size.\n";
+        return;
+    }
+
+    std::vector<unsigned char> pixels(fbWidth * fbHeight * 3);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, fbWidth, fbHeight, GL_BGR, GL_UNSIGNED_BYTE, pixels.data());
+
+    cv::Mat image(fbHeight, fbWidth, CV_8UC3, pixels.data());
+    cv::Mat flipped;
+    cv::flip(image, flipped, 0);
+
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &time);
+#else
+    localtime_r(&time, &tm);
+#endif
+
+    std::ostringstream name;
+    name << "screenshot_" << std::put_time(&tm, "%Y%m%d_%H%M%S") << ".png";
+
+    if (!cv::imwrite(name.str(), flipped)) {
+        std::cerr << "Screenshot failed: could not write " << name.str() << "\n";
+        return;
+    }
+
+    std::cout << "Saved screenshot: " << name.str() << std::endl;
+}
 // ========================================================================= //
 //                                  CLEANUP                                  //
 // ========================================================================= //
@@ -393,7 +599,7 @@ void App::destroy(void)
 
 	// clean up OpenCV
 	cv::destroyAllWindows();
-	
+
 	// clean-up GLFW
 	if (window) {
 		glfwDestroyWindow(window);

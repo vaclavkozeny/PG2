@@ -28,12 +28,21 @@ public:
         glCreateBuffers(1, &vbo_);
         glNamedBufferData(vbo_, vertices.size() * sizeof(vertex), vertices.data(), GL_STATIC_DRAW);
 
-        // 3. Nastavení atributů ve VAO (pozice z tvé struktury Vertex)
-        GLuint pos_loc = Mesh::attribute_location_position; // např. 0
-        
-        glEnableVertexArrayAttrib(vao_, pos_loc);
-        glVertexArrayAttribFormat(vao_, pos_loc, 3, GL_FLOAT, GL_FALSE, offsetof(vertex, position));
-        glVertexArrayAttribBinding(vao_, pos_loc, 0);
+        // 3. Nastavení atributů ve VAO - position, normal, texCoords
+        // Position attribute
+        glEnableVertexArrayAttrib(vao_, attribute_location_position);
+        glVertexArrayAttribFormat(vao_, attribute_location_position, 3, GL_FLOAT, GL_FALSE, offsetof(vertex, position));
+        glVertexArrayAttribBinding(vao_, attribute_location_position, 0);
+
+        // Normal attribute
+        glEnableVertexArrayAttrib(vao_, attribute_location_normal);
+        glVertexArrayAttribFormat(vao_, attribute_location_normal, 3, GL_FLOAT, GL_FALSE, offsetof(vertex, normal));
+        glVertexArrayAttribBinding(vao_, attribute_location_normal, 0);
+
+        // Texture coordinates attribute
+        glEnableVertexArrayAttrib(vao_, attribute_location_texture_coords);
+        glVertexArrayAttribFormat(vao_, attribute_location_texture_coords, 2, GL_FLOAT, GL_FALSE, offsetof(vertex, texCoords));
+        glVertexArrayAttribBinding(vao_, attribute_location_texture_coords, 0);
 
         // 4. Propojení VAO a VBO
         glVertexArrayVertexBuffer(vao_, 0, vbo_, 0, sizeof(vertex));
