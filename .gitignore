@@ -1,6 +1,7 @@
 vcpkg/
 build/
 *.json
+!resources/*.json
 .DS_STORE
 
 

@@ -96,7 +96,11 @@ void ShaderProgram::setUniform(const std::string & name, const std::vector<GLint
     glProgramUniform1iv(ID, loc, val.size(), reinterpret_cast<GLint const*>(val.data()));
 }
 
-   
+void ShaderProgram::setUniform(const std::string & name, const std::vector<GLfloat>& val) {
+    auto loc = getUniformLocation(name);
+    glProgramUniform1fv(ID, loc, val.size(), val.data());
+}
+
 void ShaderProgram::setUniform(const std::string & name, const std::vector<glm::vec3>& val) {
     auto loc = getUniformLocation(name);
     glProgramUniform3fv(ID, loc, val.size(), glm::value_ptr(val[0]));

@@ -15,9 +15,13 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 #include "app.hpp"
 #include "fps_meter.hpp"
 #include "gl_err_callback.hpp"
+#include "glInfo.hpp"
 
 // ============================================================
 // Block materials — one per BlockType, used by draw_block().
@@ -71,6 +75,7 @@ App::~App() {
 // ============================================================
 
 void App::initOpenGL() {
+    load_config("resources/config.json");
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) throw std::runtime_error("GLFW init failed.");
 
@@ -81,7 +86,7 @@ void App::initOpenGL() {
     glfwWindowHint(GLFW_OPENGL_PROFILE,        GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SAMPLES,               4);  // MSAA 4×
 
-    window = glfwCreateWindow(800, 600, "Minecraft Parkour", nullptr, nullptr);
+    window = glfwCreateWindow(config.width, config.height, config.title.c_str(), nullptr, nullptr);
     if (!window) throw std::runtime_error("Window creation failed.");
 
     glfwMakeContextCurrent(window);
@@ -95,7 +100,11 @@ void App::initOpenGL() {
     glfwSetCursorPosCallback      (window, glfw_cursor_position_callback);
 
     glewExperimental = GL_TRUE;
-    glewInit();
+    auto glew = glewInit();
+    if (glew != GLEW_OK) throw std::runtime_error(std::string("GLEW init failed: ") + (const char*)glewGetErrorString(glew));
+    auto h = getInfo();
+    std::cout << h.vendor << "\n" << h.renderer << "\n" << h.version << "\n" << h.glsl << std::endl;
+    std::cout << getProfile() << std::endl;
 }
 
 void App::init_imgui() {
@@ -164,7 +173,6 @@ void App::init_shaders() {
 
 void App::init_textures() {
     // tex_256.png = Minecraft terrain atlas (16×16 tiles).
-    // Use nearest-neighbour filter for crisp pixel-art look.
     texture_library.emplace("atlas",
         std::make_shared<Texture>(
             std::filesystem::path("../resources/textures/tex_256.png"),
@@ -187,6 +195,9 @@ void App::init_scene() {
 
     // ── Load level from JSON ──────────────────────────────────
     level.load(std::filesystem::path("../resources/level.json"));
+
+    // Build spatial grid for collision detection
+    build_collision_grid();
 
     // Position player at level start, facing +X (course direction)
     camera.Position = level.start_eye_pos;
@@ -231,6 +242,25 @@ void App::init_scene() {
     }
 }
 
+// ============================================================
+// Spatial grid construction
+// ============================================================
+
+void App::build_collision_grid() {
+    collision_grid.clear();
+
+    for (const auto& block : level.blocks) {
+        int cell_x = static_cast<int>(std::floor(block.grid.x / static_cast<float>(GRID_CELL_SIZE)));
+        int cell_z = static_cast<int>(std::floor(block.grid.z / static_cast<float>(GRID_CELL_SIZE)));
+        long long key = (static_cast<long long>(cell_x) << 32) | (cell_z & 0xFFFFFFFF);
+        collision_grid[key].push_back(&block);
+    }
+}
+
+// ============================================================
+// Lighting initialization
+// ============================================================
+
 void App::init_lighting() {
     // ── Directional (animated sun) ────────────────────────────
     dirLight.direction = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
@@ -240,41 +270,46 @@ void App::init_lighting() {
 
     // ── Point lights — orbit different sections of the course ─
 
-    // Red/warm — orbits near the start (x≈10)
-    pointLights[0].diffuse      = glm::vec3(1.0f, 0.35f, 0.10f);
-    pointLights[0].specular     = glm::vec3(1.0f, 0.35f, 0.10f);
-    pointLights[0].ambient      = glm::vec3(0.02f, 0.007f, 0.002f);
-    pointLights[0].orbitCenter  = glm::vec3(10.0f, 0.0f, 0.0f);
-    pointLights[0].orbitRadius  = 6.0f;
-    pointLights[0].orbitHeight  = 4.0f;
-    pointLights[0].orbitSpeed   = 0.8f;
-    pointLights[0].orbitAngle   = 0.0f;
-    pointLights[0].linear       = 0.045f;
-    pointLights[0].quadratic    = 0.0075f;
+    // Red/warm — orbits near the start
+    pointLights.diffuse[0]      = glm::vec3(1.0f, 0.35f, 0.10f);
+    pointLights.specular[0]     = glm::vec3(1.0f, 0.35f, 0.10f);
+    pointLights.ambient[0]      = glm::vec3(0.02f, 0.007f, 0.002f);
+    pointLights.constant[0]     = 1.0f;
+    pointLights.orbitCenter[0]  = glm::vec3(10.0f, 0.0f, 0.0f);
+    pointLights.orbitRadius[0]  = 6.0f;
+    pointLights.orbitHeight[0]  = 4.0f;
+    pointLights.orbitSpeed[0]   = 0.8f;
+    pointLights.orbitAngle[0]   = 0.0f;
+    pointLights.linear[0]       = 0.045f;
+    pointLights.quadratic[0]    = 0.0075f;
 
     // Blue/cool — orbits the middle section (x≈22)
-    pointLights[1].diffuse      = glm::vec3(0.20f, 0.45f, 1.0f);
-    pointLights[1].specular     = glm::vec3(0.20f, 0.45f, 1.0f);
-    pointLights[1].ambient      = glm::vec3(0.004f, 0.009f, 0.02f);
-    pointLights[1].orbitCenter  = glm::vec3(22.0f, 0.0f, 0.0f);
-    pointLights[1].orbitRadius  = 8.0f;
-    pointLights[1].orbitHeight  = 6.0f;
-    pointLights[1].orbitSpeed   = 0.5f;
-    pointLights[1].orbitAngle   = 2.09f;
-    pointLights[1].linear       = 0.035f;
-    pointLights[1].quadratic    = 0.005f;
+    pointLights.diffuse[1]      = glm::vec3(0.20f, 0.45f, 1.0f);
+    pointLights.specular[1]     = glm::vec3(0.20f, 0.45f, 1.0f);
+    pointLights.ambient[1]      = glm::vec3(0.004f, 0.009f, 0.02f);
+    pointLights.constant[1]     = 1.0f;
+    pointLights.orbitCenter[1]  = glm::vec3(22.0f, 0.0f, 0.0f);
+    pointLights.orbitRadius[1]  = 8.0f;
+    pointLights.orbitHeight[1]  = 6.0f;
+    pointLights.orbitSpeed[1]   = 0.5f;
+    pointLights.orbitAngle[1]   = 2.09f;
+    pointLights.linear[1]       = 0.035f;
+    pointLights.quadratic[1]    = 0.005f;
 
     // Gold/warm — orbits near the end platform (x≈38)
-    pointLights[2].diffuse      = glm::vec3(1.0f, 0.85f, 0.20f);
-    pointLights[2].specular     = glm::vec3(1.0f, 0.85f, 0.20f);
-    pointLights[2].ambient      = glm::vec3(0.02f, 0.017f, 0.004f);
-    pointLights[2].orbitCenter  = glm::vec3(38.0f, 0.0f, 0.0f);
-    pointLights[2].orbitRadius  = 5.0f;
-    pointLights[2].orbitHeight  = 5.0f;
-    pointLights[2].orbitSpeed   = 1.2f;
-    pointLights[2].orbitAngle   = 4.19f;
-    pointLights[2].linear       = 0.045f;
-    pointLights[2].quadratic    = 0.0075f;
+    pointLights.diffuse[2]      = glm::vec3(1.0f, 0.85f, 0.20f);
+    pointLights.specular[2]     = glm::vec3(1.0f, 0.85f, 0.20f);
+    pointLights.ambient[2]      = glm::vec3(0.02f, 0.017f, 0.004f);
+    pointLights.constant[2]     = 1.0f;
+    pointLights.orbitCenter[2]  = glm::vec3(38.0f, 0.0f, 0.0f);
+    pointLights.orbitRadius[2]  = 5.0f;
+    pointLights.orbitHeight[2]  = 5.0f;
+    pointLights.orbitSpeed[2]   = 1.2f;
+    pointLights.orbitAngle[2]   = 4.19f;
+    pointLights.linear[2]       = 0.045f;
+    pointLights.quadratic[2]    = 0.0075f;
+
+    pointLights.updatePositions();
 
     // ── Spotlight — camera headlight ──────────────────────────
     spotLight.direction   = glm::vec3(0.0f, 0.0f, -1.0f);
@@ -297,23 +332,24 @@ void App::set_lighting_uniforms(const std::shared_ptr<ShaderProgram>& shader,
                                 const glm::mat4& view) const
 {
     const glm::mat3 V3(view);
+    std::vector<glm::vec3> point_positions;
+    point_positions.reserve(NUM_POINT_LIGHTS);
+    for (std::size_t i = 0; i < NUM_POINT_LIGHTS; ++i) {
+        point_positions.push_back(glm::vec3(view * glm::vec4(pointLights.position[i], 1.0f)));
+    }
 
     shader->setUniform("dirLight.direction", V3 * dirLight.direction);
     shader->setUniform("dirLight.ambient",   dirLight.ambient);
     shader->setUniform("dirLight.diffuse",   dirLight.diffuse);
     shader->setUniform("dirLight.specular",  dirLight.specular);
 
-    for (int i = 0; i < 3; ++i) {
-        const std::string p = "pointLights[" + std::to_string(i) + "].";
-        const glm::vec3 posV = glm::vec3(view * glm::vec4(pointLights[i].worldPosition(), 1.0f));
-        shader->setUniform(p + "position",  posV);
-        shader->setUniform(p + "ambient",   pointLights[i].ambient);
-        shader->setUniform(p + "diffuse",   pointLights[i].diffuse);
-        shader->setUniform(p + "specular",  pointLights[i].specular);
-        shader->setUniform(p + "constant",  pointLights[i].constant);
-        shader->setUniform(p + "linear",    pointLights[i].linear);
-        shader->setUniform(p + "quadratic", pointLights[i].quadratic);
-    }
+    shader->setUniform("pointLights.position[0]", point_positions);
+    shader->setUniform("pointLights.ambient[0]",   std::vector<glm::vec3>(pointLights.ambient.begin(), pointLights.ambient.end()));
+    shader->setUniform("pointLights.diffuse[0]",   std::vector<glm::vec3>(pointLights.diffuse.begin(), pointLights.diffuse.end()));
+    shader->setUniform("pointLights.specular[0]",  std::vector<glm::vec3>(pointLights.specular.begin(), pointLights.specular.end()));
+    shader->setUniform("pointLights.constant[0]",  std::vector<GLfloat>(pointLights.constant.begin(), pointLights.constant.end()));
+    shader->setUniform("pointLights.linear[0]",    std::vector<GLfloat>(pointLights.linear.begin(), pointLights.linear.end()));
+    shader->setUniform("pointLights.quadratic[0]", std::vector<GLfloat>(pointLights.quadratic.begin(), pointLights.quadratic.end()));
 
     shader->setUniform("spotLight.direction",   spotLight.direction);
     shader->setUniform("spotLight.ambient",     spotLight.ambient);
@@ -447,13 +483,26 @@ void App::update_physics(float dt) {
     glm::vec3 forward = glm::normalize(glm::vec3(camera.Front.x, 0.0f, camera.Front.z));
     glm::vec3 right   = glm::normalize(glm::vec3(camera.Right.x, 0.0f, camera.Right.z));
 
-    glm::vec3 h_move{0.0f};
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) h_move += forward;
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) h_move -= forward;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) h_move -= right;
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) h_move += right;
-    if (glm::length(h_move) > 0.01f)
-        h_move = glm::normalize(h_move) * Player::MOVE_SPEED;
+    // Desired horizontal movement based on input (camera-relative, XZ only)
+    glm::vec3 input_dir{0.0f};
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) input_dir += forward;
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) input_dir -= forward;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) input_dir -= right;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) input_dir += right;
+    glm::vec3 desired_h{0.0f};
+    if (glm::length(input_dir) > 0.01f)
+        desired_h = glm::normalize(input_dir) * Player::MOVE_SPEED;
+
+    // Ground: immediate control. Air: allow momentum and limited air control.
+    if (player.grounded) {
+        player.vel_h.x = desired_h.x;
+        player.vel_h.z = desired_h.z;
+    } else {
+        const float AIR_CONTROL = 6.0f; // how fast horizontal velocity approaches desired in air
+        const float t = glm::clamp(AIR_CONTROL * dt, 0.0f, 1.0f);
+        player.vel_h.x = glm::mix(player.vel_h.x, desired_h.x, t);
+        player.vel_h.z = glm::mix(player.vel_h.z, desired_h.z, t);
+    }
 
     // ── Jump ───────────────────────────────────────────────────
     if (player.jump_req) {
@@ -479,8 +528,9 @@ void App::update_physics(float dt) {
     resolve_collisions(prev_feet_y);
 
     // ── Horizontal movement → re-resolve XZ collisions ─────────
-    player.feet.x += h_move.x * dt;
-    player.feet.z += h_move.z * dt;
+    // Apply horizontal velocity (preserves momentum in air)
+    player.feet.x += player.vel_h.x * dt;
+    player.feet.z += player.vel_h.z * dt;
 
     // Re-resolve only XZ after horizontal move (pass same prev_feet_y
     // so the Y branch won't fire again for the same blocks).
@@ -493,45 +543,59 @@ void App::update_physics(float dt) {
 void App::resolve_collisions(float prev_feet_y) {
     const float R  = Player::RADIUS;
     const float H  = Player::EYE_HEIGHT;
+    const int CELL_SIZE = GRID_CELL_SIZE;
 
-    for (const auto& block : level.blocks) {
-        const glm::vec3 bp{block.grid};
-        const float bx1 = bp.x - 0.5f, bx2 = bp.x + 0.5f;
-        const float by1 = bp.y - 0.5f, by2 = bp.y + 0.5f;
-        const float bz1 = bp.z - 0.5f, bz2 = bp.z + 0.5f;
+    // Compute which grid cells the player overlaps
+    int cell_x_min = static_cast<int>(std::floor((player.feet.x - R) / CELL_SIZE));
+    int cell_x_max = static_cast<int>(std::floor((player.feet.x + R) / CELL_SIZE));
+    int cell_z_min = static_cast<int>(std::floor((player.feet.z - R) / CELL_SIZE));
+    int cell_z_max = static_cast<int>(std::floor((player.feet.z + R) / CELL_SIZE));
 
-        const float px1 = player.feet.x - R, px2 = player.feet.x + R;
-        const float py1 = player.feet.y,     py2 = player.feet.y + H;
-        const float pz1 = player.feet.z - R, pz2 = player.feet.z + R;
+    // Check only blocks in nearby cells (9-cell neighborhood)
+    for (int cx = cell_x_min; cx <= cell_x_max; ++cx) {
+        for (int cz = cell_z_min; cz <= cell_z_max; ++cz) {
+            long long key = (static_cast<long long>(cx) << 32) | (cz & 0xFFFFFFFF);
+            auto it = collision_grid.find(key);
+            if (it == collision_grid.end()) continue;
 
-        // Quick AABB rejection
-        // Note: Y uses strict > so that feet exactly at block-top still
-        // triggers the grounded snap instead of being silently skipped.
-        if (px2 <= bx1 || px1 >= bx2) continue;
-        if (py2 <= by1 || py1 >  by2) continue;
-        if (pz2 <= bz1 || pz1 >= bz2) continue;
+            for (const auto* block : it->second) {
+                const glm::vec3 bp{block->grid};
+                const float bx1 = bp.x - 0.5f, bx2 = bp.x + 0.5f;
+                const float by1 = bp.y - 0.5f, by2 = bp.y + 0.5f;
+                const float bz1 = bp.z - 0.5f, bz2 = bp.z + 0.5f;
 
-        // Determine resolution axis from previous position
-        const bool came_from_above = prev_feet_y        >= by2 - 0.02f;
-        const bool came_from_below = prev_feet_y + H    <= by1 + 0.02f;
+                const float px1 = player.feet.x - R, px2 = player.feet.x + R;
+                const float py1 = player.feet.y,     py2 = player.feet.y + H;
+                const float pz1 = player.feet.z - R, pz2 = player.feet.z + R;
 
-        if (came_from_above && player.vel_y <= 0.05f) {
-            // Landing on top of block
-            player.feet.y   = by2;
-            player.vel_y    = 0.0f;
-            player.grounded = true;
-        } else if (came_from_below && player.vel_y > 0.0f) {
-            // Head hit ceiling
-            player.feet.y = by1 - H;
-            player.vel_y  = 0.0f;
-        } else {
-            // Horizontal push-out (smallest XZ penetration)
-            const float pen_x = std::min(px2 - bx1, bx2 - px1);
-            const float pen_z = std::min(pz2 - bz1, bz2 - pz1);
-            if (pen_x < pen_z) {
-                player.feet.x = (player.feet.x < bp.x) ? bx1 - R : bx2 + R;
-            } else {
-                player.feet.z = (player.feet.z < bp.z) ? bz1 - R : bz2 + R;
+                // Quick AABB rejection
+                if (px2 <= bx1 || px1 >= bx2) continue;
+                if (py2 <= by1 || py1 >  by2) continue;
+                if (pz2 <= bz1 || pz1 >= bz2) continue;
+
+                // Determine resolution axis from previous position
+                const bool came_from_above = prev_feet_y        >= by2 - 0.02f;
+                const bool came_from_below = prev_feet_y + H    <= by1 + 0.02f;
+
+                if (came_from_above && player.vel_y <= 0.05f) {
+                    // Landing on top of block
+                    player.feet.y   = by2;
+                    player.vel_y    = 0.0f;
+                    player.grounded = true;
+                } else if (came_from_below && player.vel_y > 0.0f) {
+                    // Head hit ceiling
+                    player.feet.y = by1 - H;
+                    player.vel_y  = 0.0f;
+                } else {
+                    // Horizontal push-out (smallest XZ penetration)
+                    const float pen_x = std::min(px2 - bx1, bx2 - px1);
+                    const float pen_z = std::min(pz2 - bz1, bz2 - pz1);
+                    if (pen_x < pen_z) {
+                        player.feet.x = (player.feet.x < bp.x) ? bx1 - R : bx2 + R;
+                    } else {
+                        player.feet.z = (player.feet.z < bp.z) ? bz1 - R : bz2 + R;
+                    }
+                }
             }
         }
     }
@@ -542,6 +606,7 @@ void App::respawn() {
     camera.SetOrientation(0.0f);
     player.feet     = level.start_eye_pos - glm::vec3(0.0f, Player::EYE_HEIGHT, 0.0f);
     player.vel_y    = 0.0f;
+    player.vel_h    = glm::vec3(0.0f);
     player.grounded = false;
     player.jump_req = false;
     ++death_count;
@@ -636,8 +701,9 @@ int App::run() {
             }
 
             // Advance point-light orbits
-            for (auto& pl : pointLights)
-                pl.orbitAngle += dt * pl.orbitSpeed;
+            for (std::size_t i = 0; i < NUM_POINT_LIGHTS; ++i)
+                pointLights.orbitAngle[i] += dt * pointLights.orbitSpeed[i];
+            pointLights.updatePositions();
 
             // Animate decorative models
             orb_angle  += dt * 0.4f;
@@ -705,8 +771,8 @@ int App::run() {
 
             glfwSwapBuffers(window);
             FPS.update();
-            if (FPS.is_updated())
-                std::cout << "FPS: " << FPS.get() << std::endl;
+            /*if (FPS.is_updated())
+                std::cout << "FPS: " << FPS.get() << std::endl;*/
         }
     }
     catch (const std::exception& e) {
@@ -743,27 +809,100 @@ void App::toggle_fullscreen(GLFWwindow* win) {
     }
 }
 
-GLFWmonitor* App::GetCurrentMonitor(GLFWwindow* win) {
-    int count = 0;
-    GLFWmonitor** monitors = glfwGetMonitors(&count);
+
+GLFWmonitor* App::GetCurrentMonitor(GLFWwindow* window) {
+    // get all monitors
+    int monitorCount;
+    GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
     if (!monitors) return glfwGetPrimaryMonitor();
 
-    int wx, wy, ww, wh;
-    glfwGetWindowPos (win, &wx, &wy);
-    glfwGetWindowSize(win, &ww, &wh);
+    //store window params
+    int windowX, windowY, windowWidth, windowHeight;
+    glfwGetWindowPos(window, &windowX, &windowY);
+    glfwGetWindowSize(window, &windowWidth, &windowHeight);
 
-    GLFWmonitor* best = nullptr;
-    int bestArea = 0;
+    GLFWmonitor* bestMonitor = nullptr;
+    int bestOverlapArea = 0;
 
-    for (int i = 0; i < count; ++i) {
-        int mx, my;
-        glfwGetMonitorPos(monitors[i], &mx, &my);
-        const GLFWvidmode* mode = glfwGetVideoMode(monitors[i]);
+    //find best overlap
+    for (int i = 0; i < monitorCount; i++) {
+        GLFWmonitor* monitor = monitors[i];
+
+        int monitorX, monitorY;
+        glfwGetMonitorPos(monitor, &monitorX, &monitorY);
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
         if (!mode) continue;
-        const int ox   = std::max(0, std::min(wx+ww, mx+mode->width)  - std::max(wx, mx));
-        const int oy   = std::max(0, std::min(wy+wh, my+mode->height) - std::max(wy, my));
-        const int area = ox * oy;
-        if (area > bestArea) { bestArea = area; best = monitors[i]; }
+
+        // Calculate the intersection (overlap) between the window and the monitor
+        int overlapX = std::max(0, std::min(windowX + windowWidth, monitorX + mode->width) - std::max(windowX, monitorX));
+        int overlapY = std::max(0, std::min(windowY + windowHeight, monitorY + mode->height) - std::max(windowY, monitorY));
+        int overlapArea = overlapX * overlapY;
+
+        if (overlapArea > bestOverlapArea) {
+            bestOverlapArea = overlapArea;
+            bestMonitor = monitor;
+        }
     }
-    return best ? best : glfwGetPrimaryMonitor();
+    return bestMonitor ? bestMonitor : glfwGetPrimaryMonitor();
+}
+void App::load_config(std::string filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Could not open config file, using defaults.\n";
+        return;
+    }
+
+    try {
+        json j;
+        file >> j;
+
+        config.width = j["window"].value("width", 800);
+        config.height = j["window"].value("height", 600);
+        config.title = j["window"].value("title", "OpenGL Window");
+        config.vsync = j["window"].value("vsync", false);
+        config.msaa = j["window"].value("msaa", false);
+        vsync = config.vsync;
+        msaa = config.msaa;
+    }
+    catch (const json::parse_error& e) {
+        std::cerr << "JSON parse error: " << e.what() << "\n";
+    }
+}
+void App::save_screenshot(void)
+{
+    int fbWidth = 0;
+    int fbHeight = 0;
+    glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+    if (fbWidth <= 0 || fbHeight <= 0) {
+        std::cerr << "Screenshot failed: invalid framebuffer size.\n";
+        return;
+    }
+
+    std::vector<unsigned char> pixels(fbWidth * fbHeight * 3);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, fbWidth, fbHeight, GL_BGR, GL_UNSIGNED_BYTE, pixels.data());
+
+    cv::Mat image(fbHeight, fbWidth, CV_8UC3, pixels.data());
+    cv::Mat flipped;
+    cv::flip(image, flipped, 0);
+
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &time);
+#else
+    localtime_r(&time, &tm);
+#endif
+
+    std::ostringstream name;
+    name << "screenshot_" << std::put_time(&tm, "%Y%m%d_%H%M%S") << ".png";
+
+    if (!cv::imwrite(name.str(), flipped)) {
+        std::cerr << "Screenshot failed: could not write " << name.str() << "\n";
+        return;
+    }
+
+    std::cout << "Saved screenshot: " << name.str() << std::endl;
 }

@@ -14,6 +14,7 @@ struct Player {
 
     glm::vec3 feet   {0.0f, 0.5f, 0.0f}; // bottom of player bounding box (world)
     float     vel_y  {0.0f};             // current vertical velocity (m/s)
+    glm::vec3 vel_h  {0.0f};             // horizontal velocity (m/s), XZ
     bool      grounded{false};           // true when standing on a block
     bool      jump_req{false};           // set by key callback, consumed by physics
 

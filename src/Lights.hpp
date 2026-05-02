@@ -1,5 +1,8 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 
@@ -11,6 +14,8 @@
 // space before uploading to the GPU.
 // ============================================================
 
+constexpr std::size_t NUM_POINT_LIGHTS = 3;
+
 // Infinite directional light (sun, moon, etc.)
 struct DirectionalLight {
     glm::vec3 direction{-0.3f, -1.0f, -0.5f};  // unit vector, world space
@@ -19,31 +24,33 @@ struct DirectionalLight {
     glm::vec3 specular { 1.0f, 0.95f, 0.8f};
 };
 
-// Attenuated omnidirectional point light with an optional orbit animation.
-struct PointLight {
-    glm::vec3 diffuse;   // must be provided (no sensible default color)
-    glm::vec3 specular;
-    glm::vec3 ambient  {0.02f};
+// Attenuated omnidirectional point lights in SoA form.
+struct PointLights {
+    std::array<glm::vec3, NUM_POINT_LIGHTS> position{};
+    std::array<glm::vec3, NUM_POINT_LIGHTS> ambient{};
+    std::array<glm::vec3, NUM_POINT_LIGHTS> diffuse{};
+    std::array<glm::vec3, NUM_POINT_LIGHTS> specular{};
 
     // Quadratic attenuation: 1 / (c + l*d + q*d²)
-    float constant {1.0f};
-    float linear   {0.09f};
-    float quadratic{0.032f};
+    std::array<float, NUM_POINT_LIGHTS> constant{};
+    std::array<float, NUM_POINT_LIGHTS> linear{};
+    std::array<float, NUM_POINT_LIGHTS> quadratic{};
 
     // Orbit parameters — updated each frame from App::run()
-    glm::vec3 orbitCenter{0.0f};  // world-space centre of the orbit
-    float orbitRadius{3.0f};
-    float orbitHeight{0.0f};
-    float orbitSpeed {1.0f};
-    float orbitAngle {0.0f};  // radians, wraps naturally
+    std::array<glm::vec3, NUM_POINT_LIGHTS> orbitCenter{};
+    std::array<float, NUM_POINT_LIGHTS> orbitRadius{};
+    std::array<float, NUM_POINT_LIGHTS> orbitHeight{};
+    std::array<float, NUM_POINT_LIGHTS> orbitSpeed{};
+    std::array<float, NUM_POINT_LIGHTS> orbitAngle{};  // radians, wraps naturally
 
-    // Returns the current world-space position based on the orbit state.
-    [[nodiscard]] glm::vec3 worldPosition() const {
-        return orbitCenter + glm::vec3{
-            orbitRadius * glm::cos(orbitAngle),
-            orbitHeight,
-            orbitRadius * glm::sin(orbitAngle),
-        };
+    void updatePositions() {
+        for (std::size_t i = 0; i < NUM_POINT_LIGHTS; ++i) {
+            position[i] = orbitCenter[i] + glm::vec3{
+                orbitRadius[i] * glm::cos(orbitAngle[i]),
+                orbitHeight[i],
+                orbitRadius[i] * glm::sin(orbitAngle[i]),
+            };
+        }
     }
 };
 

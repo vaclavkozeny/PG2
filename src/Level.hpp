@@ -131,6 +131,9 @@ struct Level {
         end_radius    = j.value("end_radius", 2.5f);
 
         for (const auto& b : j["blocks"]) {
+            if (!b.contains("x") || !b.contains("y") || !b.contains("z")) {
+                continue;
+            }
             LevelBlock lb;
             lb.grid = { b["x"].get<int>(), b["y"].get<int>(), b["z"].get<int>() };
             lb.type = block_type_from_string(b.value("type", "stone"));

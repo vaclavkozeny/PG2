@@ -43,7 +43,8 @@ public:
     int  savedXPos{0}, savedYPos{0};
     int  savedWidth{800},  savedHeight{600};
     bool show_imgui       {true};
-    bool vsync            {true};
+    bool vsync            {false};
+    bool msaa             {false};
 
     // ── Asset libraries ────────────────────────────────────────
     std::unordered_map<std::string, std::shared_ptr<ShaderProgram>> shader_library;
@@ -61,7 +62,7 @@ public:
 
     // ── Lighting ───────────────────────────────────────────────
     DirectionalLight          dirLight;
-    std::array<PointLight, 3> pointLights;
+    PointLights               pointLights;
     SpotLight                 spotLight;
 
     // ── GLFW callbacks ─────────────────────────────────────────
@@ -71,9 +72,6 @@ public:
     static void glfw_mouse_button_callback    (GLFWwindow*, int, int, int);
     static void glfw_cursor_position_callback (GLFWwindow*, double, double);
     static void glfw_scroll_callback          (GLFWwindow*, double, double);
-
-    void         toggle_fullscreen(GLFWwindow*);
-    GLFWmonitor* GetCurrentMonitor(GLFWwindow*);
 
 private:
     // ── Viewport & projection ──────────────────────────────────
@@ -91,6 +89,12 @@ private:
     // ── Block rendering ────────────────────────────────────────
     // One shared mesh per BlockType; each block just supplies a model matrix.
     std::unordered_map<BlockType, std::shared_ptr<Mesh>> block_meshes;
+
+    // ── Spatial partitioning for collision detection ──────────────
+    // Grid maps global cell keys to block pointers for fast spatial lookups.
+    std::unordered_map<long long, std::vector<const LevelBlock*>> collision_grid;
+    static constexpr int GRID_CELL_SIZE = 16;  // blocks per cell
+    void build_collision_grid();
 
     // ── OBJ-loaded scene decoration (satisfy "2 models from file") ─
     std::shared_ptr<Model> deco_orb;     // orbiting sphere loaded from OBJ
@@ -127,4 +131,18 @@ private:
 
     // ── HUD helpers ────────────────────────────────────────────
     void draw_hud();
+    // ── Helper functions ──────────────────────────────────
+    void load_config(std::string filename);
+    void save_screenshot(void);
+    void         toggle_fullscreen(GLFWwindow*);
+    GLFWmonitor* GetCurrentMonitor(GLFWwindow*);
+    // Config struct for loading/saving settings
+    struct WindowConfig {
+        int width;
+        int height;
+        std::string title;
+        bool vsync;
+        bool msaa;
+    };
+    WindowConfig config;
 };

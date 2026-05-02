@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_BUILD_TYPE Debug)
 
+find_package(OpenGL               REQUIRED)
 find_package(glm           CONFIG REQUIRED)
 find_package(GLEW                 REQUIRED)
 find_package(glfw3         CONFIG REQUIRED)
@@ -44,11 +45,14 @@ set(PROJECT_SOURCES
     src/Particle.hpp
     src/Player.hpp
     src/Level.hpp
+    src/glInfo.cpp
+    src/glInfo.hpp
 )
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
+    OpenGL::GL
     GLEW::GLEW
     glfw
     glm::glm

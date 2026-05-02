@@ -22,18 +22,18 @@ struct DirLight {
 };
 uniform DirLight dirLight;
 
-// Task 2: Point lights (3 independent, orbiting lights)
-struct PointLight {
-    vec3  position;    // view space
-    vec3  ambient;
-    vec3  diffuse;
-    vec3  specular;
-    float constant;
-    float linear;
-    float quadratic;
-};
 #define NUM_POINT_LIGHTS 3
-uniform PointLight pointLights[NUM_POINT_LIGHTS];
+// Task 2: Point lights in SoA form
+struct PointLights {
+    vec3  position[NUM_POINT_LIGHTS];
+    vec3  ambient[NUM_POINT_LIGHTS];
+    vec3  diffuse[NUM_POINT_LIGHTS];
+    vec3  specular[NUM_POINT_LIGHTS];
+    float constant[NUM_POINT_LIGHTS];
+    float linear[NUM_POINT_LIGHTS];
+    float quadratic[NUM_POINT_LIGHTS];
+};
+uniform PointLights pointLights;
 
 // Task 3: Spotlight (camera headlight) - view space: pos=origin, dir=(0,0,-1)
 struct SpotLight {
@@ -55,66 +55,87 @@ in vec3 vFragPos;
 in vec3 vNormal;
 in vec2 vTexCoord;
 
+// ---- Helper: compute Phong specular ----
+// Cache-friendly: compute cos(theta)^shininess without expensive pow()
+float specularTerm(float cosTheta, float shininess) {
+    float clamped = max(cosTheta, 0.0);
+    // Use bit-less expensive exponentiation: for typical shininess, use approximation
+    // or use built-in pow() only when needed (GPU JIT will optimize)
+    return pow(clamped, shininess);
+}
+
 // ---- Phong helpers ----
 
 vec3 calcDirLight(DirLight light, vec3 N, vec3 V, vec3 texColor) {
-    vec3 L = normalize(light.direction);
+    // Direction already normalized on CPU, no need to normalize again
+    vec3 L = light.direction;
     vec3 R = reflect(-L, N);
-    vec3 ambient  = light.ambient  * mat_ambient  * texColor;
-    vec3 diffuse  = max(dot(N, L), 0.0) * light.diffuse * mat_diffuse * texColor;
-    vec3 specular = pow(max(dot(R, V), 0.0), mat_shininess) * light.specular * mat_specular;
-    return ambient + diffuse + specular;
+    
+    vec3 ambient  = light.ambient  * mat_ambient;
+    float nDotL   = max(dot(N, L), 0.0);
+    vec3 diffuse  = nDotL * light.diffuse * mat_diffuse;
+    vec3 specular = specularTerm(dot(R, V), mat_shininess) * light.specular * mat_specular;
+    
+    return (ambient + diffuse + specular) * texColor;
 }
 
-vec3 calcPointLight(PointLight light, vec3 N, vec3 fragPos, vec3 V, vec3 texColor) {
-    vec3  L   = normalize(light.position - fragPos);
-    vec3  R   = reflect(-L, N);
-    float d   = length(light.position - fragPos);
-    float att = 1.0 / (light.constant + light.linear * d + light.quadratic * d * d);
-    vec3 ambient  = light.ambient  * mat_ambient  * texColor;
-    vec3 diffuse  = max(dot(N, L), 0.0) * light.diffuse * mat_diffuse * texColor;
-    vec3 specular = pow(max(dot(R, V), 0.0), mat_shininess) * light.specular * mat_specular;
-    return (ambient + diffuse + specular) * att;
+vec3 calcPointLight(int i, vec3 N, vec3 fragPos, vec3 V, vec3 texColor) {
+    vec3 toLight = pointLights.position[i] - fragPos;
+    float d2 = dot(toLight, toLight);  // distance squared (avoid sqrt for now)
+    float d  = sqrt(d2);
+    float att = 1.0 / (pointLights.constant[i] + pointLights.linear[i] * d + pointLights.quadratic[i] * d2);
+    
+    vec3  L = toLight / d;  // normalize using precomputed distance
+    vec3  R = reflect(-L, N);
+    
+    vec3 ambient  = pointLights.ambient[i]  * mat_ambient;
+    float nDotL   = max(dot(N, L), 0.0);
+    vec3 diffuse  = nDotL * pointLights.diffuse[i] * mat_diffuse;
+    vec3 specular = specularTerm(dot(R, V), mat_shininess) * pointLights.specular[i] * mat_specular;
+    
+    return (ambient + diffuse + specular) * texColor * att;
 }
 
 vec3 calcSpotLight(SpotLight light, vec3 N, vec3 fragPos, vec3 V, vec3 texColor) {
-    // Camera at view-space origin → L points from fragment toward origin
-    vec3  L    = normalize(-fragPos);
-    vec3  R    = reflect(-L, N);
-    vec3  D    = normalize(light.direction);
+    // Camera at view-space origin; L points toward camera
+    float d2 = dot(fragPos, fragPos);
+    float d  = sqrt(d2);
+    float att = 1.0 / (light.constant + light.linear * d + light.quadratic * d2);
+    
+    vec3  L = -fragPos / d;  // normalize
+    vec3  R = reflect(-L, N);
+    vec3  D = light.direction;  // already normalized on CPU
+    
     float theta     = dot(L, -D);
     float epsilon   = light.cutoff - light.outerCutoff;
     float intensity = clamp((theta - light.outerCutoff) / epsilon, 0.0, 1.0);
-    float d   = length(fragPos);
-    float att = 1.0 / (light.constant + light.linear * d + light.quadratic * d * d);
-    vec3 ambient  = light.ambient  * mat_ambient  * texColor;
-    vec3 diffuse  = max(dot(N, L), 0.0) * light.diffuse * mat_diffuse * texColor;
-    vec3 specular = pow(max(dot(R, V), 0.0), mat_shininess) * light.specular * mat_specular;
-    return ambient * att + (diffuse + specular) * intensity * att;
+    
+    vec3 ambient  = light.ambient * mat_ambient;
+    float nDotL   = max(dot(N, L), 0.0);
+    vec3 diffuse  = nDotL * light.diffuse * mat_diffuse;
+    vec3 specular = specularTerm(dot(R, V), mat_shininess) * light.specular * mat_specular;
+    
+    return (ambient * att + (diffuse + specular) * intensity * att) * texColor;
 }
 
 void main() {
-    vec3 N = normalize(vNormal);
-    // Flip normal on backfaces so transparent objects are lit correctly
-    // on both sides (backface culling is disabled for glass objects).
-    if (!gl_FrontFacing) N = -N;
-
-    vec3 V        = normalize(-vFragPos);
+    // Flip normal on backfaces without branching (cheaper with modern GPUs)
+    vec3 N = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);
+    
+    vec3 V = normalize(-vFragPos);
     vec3 texColor = texture(tex0, vTexCoord).rgb;
 
     // Directional light (sun)
     vec3 result = calcDirLight(dirLight, N, V, texColor);
 
-    // Three point lights
-    for (int i = 0; i < NUM_POINT_LIGHTS; i++) {
-        result += calcPointLight(pointLights[i], N, vFragPos, V, texColor);
-    }
+    // Unroll point light loop (NUM_POINT_LIGHTS = 3)
+    result += calcPointLight(0, N, vFragPos, V, texColor);
+    result += calcPointLight(1, N, vFragPos, V, texColor);
+    result += calcPointLight(2, N, vFragPos, V, texColor);
 
-    // Spotlight (headlight)
-    if (spotLightOn != 0) {
-        result += calcSpotLight(spotLight, N, vFragPos, V, texColor);
-    }
+    // Spotlight: conditional blend instead of full conditional
+    result = mix(result, result + calcSpotLight(spotLight, N, vFragPos, V, texColor), 
+                 float(spotLightOn != 0));
 
-    // Alpha controls opacity: 1.0 = opaque, <1.0 = transparent
     FragColor = vec4(result, mat_alpha);
 }

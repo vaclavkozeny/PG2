@@ -1,0 +1,9 @@
+{
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "title": "OpenGL JSON Configured Window",
+    "vsync": false,
+    "msaa": false
+  }
+}
