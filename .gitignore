@@ -1,3 +1,10 @@
 vcpkg/
 build/
 *.json
+.DS_STORE
+
+
+07lab - tex/
+08cv - lights/
+09cv - alpha, phys/
+10lab - tips/
