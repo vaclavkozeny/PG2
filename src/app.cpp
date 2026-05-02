@@ -71,20 +71,20 @@ void error_callback(int error, const char* description) {
     std::cerr << "Error: " << description << std::endl;
 }
 void App::init_assets(void) {
-    shader_library.emplace("simple_shader", std::make_shared<shader_program>((std::filesystem::path)"basic_core.vert",(std::filesystem::path)"basic.frag"));
-    shader_library.emplace("rainbow", std::make_shared<shader_program>((std::filesystem::path)"basic_core.vert",(std::filesystem::path)"GL_rainbow.frag"));
-    shader_library.emplace("texture", std::make_shared<shader_program>((std::filesystem::path)"tex.vert",(std::filesystem::path)"tex.frag"));
+    shader_library.emplace("simple_shader", std::make_shared<shader_program>((std::filesystem::path)"shaders/basic_core.vert",(std::filesystem::path)"shaders/basic.frag"));
+    shader_library.emplace("rainbow", std::make_shared<shader_program>((std::filesystem::path)"shaders/basic_core.vert",(std::filesystem::path)"shaders/GL_rainbow.frag"));
+    shader_library.emplace("texture", std::make_shared<shader_program>((std::filesystem::path)"shaders/tex.vert",(std::filesystem::path)"shaders/tex.frag"));
 
-    shader_library.emplace("lighting", std::make_shared<shader_program>((std::filesystem::path)"lighting.vert",(std::filesystem::path)"lighting.frag"));
+    shader_library.emplace("lighting", std::make_shared<shader_program>((std::filesystem::path)"shaders/lighting.vert",(std::filesystem::path)"shaders/lighting.frag"));
 
 
-    texture_library.emplace("wood_box", std::make_shared<Texture>((std::filesystem::path)"box_rgb888.png"));
-    texture_library.emplace("mix", std::make_shared<Texture>((std::filesystem::path)"tex_1024.jpg"));
+    texture_library.emplace("wood_box", std::make_shared<Texture>((std::filesystem::path)"resources/textures/box_rgb888.png"));
+    texture_library.emplace("mix", std::make_shared<Texture>((std::filesystem::path)"resources/textures/tex_1024.jpg"));
 
     //mesh_library.emplace("cube", generateCube());
     //mesh_library.emplace("sphere", generateSphere(36, 18));
 
-    Model myModel((std::filesystem::path)"teapot.obj", shader_library.at("lighting"), texture_library.at("wood_box"));
+    Model myModel((std::filesystem::path)"resources/models/teapot.obj", shader_library.at("lighting"), texture_library.at("wood_box"));
     myModel.setScale(glm::vec3(0.3f)); // scale down the teapot
     scene.emplace("teapot_object", myModel);
 
@@ -103,21 +103,18 @@ void App::init_assets(void) {
     floor_model.addMesh(floor_mesh, shader_library.at("lighting"), texture_library.at("wood_box"));
     scene.emplace("floor_object", floor_model);
 
-    Model bunny_model((std::filesystem::path)"bunny.obj", shader_library.at("lighting"), texture_library.at("mix"));
+    Model bunny_model((std::filesystem::path)"resources/models/bunny.obj", shader_library.at("lighting"), texture_library.at("mix"));
     bunny_model.setPosition(glm::vec3(8.0f, 0.0f, 0.0f));
     bunny_model.is_transparent = true;
     scene.emplace("bunny_object", bunny_model);
-
-
-
-    }
+}
 void App::init_gl(void){
-    load_config("config.json");
+    load_config("resources/config.json");
     //std::cout << config.title << "\n";
     // init glfw
     glfwSetErrorCallback(error_callback);
     if (!glfwInit())
-        throw std::runtime_error("GLWF not ok!");
+        throw std::runtime_error("GLWF not ok! test");
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);

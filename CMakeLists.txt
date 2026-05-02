@@ -21,27 +21,26 @@ elseif(UNIX)
 endif()
 
 set(PROJECT_SOURCES
-    texture.hpp
-    texture.cpp
-    camera.hpp
-    OBJloader.cpp
-    OBJloader.hpp
-    meshgen.cpp
-    model.hpp
-    mesh.hpp
-    shader_program.hpp
-    shader_program.cpp
-    fps_meter.hpp
-    gl_err_callback.h
-    gl_err_callback.cpp
-    getinfo.cpp
-    getinfo.hpp
-    assets.hpp
-    app.hpp
-    app.cpp
-    main.cpp
+    src/texture.hpp
+    src/texture.cpp
+    src/camera.hpp
+    src/OBJloader.cpp
+    src/OBJloader.hpp
+    src/meshgen.cpp
+    src/model.hpp
+    src/mesh.hpp
+    src/shader_program.hpp
+    src/shader_program.cpp
+    src/fps_meter.hpp
+    src/gl_err_callback.h
+    src/gl_err_callback.cpp
+    src/getinfo.cpp
+    src/getinfo.hpp
+    src/assets.hpp
+    src/app.hpp
+    src/app.cpp
+    src/main.cpp
 )
-
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE 
@@ -54,7 +53,14 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     imgui::imgui
 )
 
+
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/src
     ${OpenCV_INCLUDE_DIRS}
+)
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/shaders $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders
 )
