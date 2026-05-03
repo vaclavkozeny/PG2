@@ -61,9 +61,11 @@ const Material& material_for(BlockType t) {
 App::App() { std::cout << "Constructed...\n"; }
 
 App::~App() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    if (imgui_initialized) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+    }
     if (window) { glfwDestroyWindow(window); window = nullptr; }
     glfwTerminate();
     cv::destroyAllWindows();
@@ -112,6 +114,7 @@ void App::init_imgui() {
     ImGui::CreateContext();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init();
+    imgui_initialized = true;
     std::cout << "ImGui " << ImGui::GetVersion() << "\n";
 }
 

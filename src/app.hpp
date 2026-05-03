@@ -45,6 +45,7 @@ public:
     bool show_imgui       {true};
     bool vsync            {false};
     bool msaa             {false};
+    bool imgui_initialized{false};
 
     // ── Asset libraries ────────────────────────────────────────
     std::unordered_map<std::string, std::shared_ptr<ShaderProgram>> shader_library;
@@ -138,11 +139,11 @@ private:
     GLFWmonitor* GetCurrentMonitor(GLFWwindow*);
     // Config struct for loading/saving settings
     struct WindowConfig {
-        int width;
-        int height;
-        std::string title;
-        bool vsync;
-        bool msaa;
+        int width{800};
+        int height{600};
+        std::string title{"OpenGL Window"};
+        bool vsync{false};
+        bool msaa{false};
     };
     WindowConfig config;
 };
