@@ -21,14 +21,10 @@
 #include "ShaderProgram.hpp"
 #include "Texture.hpp"
 
-// ============================================================
 // GamePhase — controls which logic/HUD runs each frame.
-// ============================================================
 enum class GamePhase { Playing, Won };
 
-// ============================================================
 // App — owns all OpenGL state, scene, physics, and game loop.
-// ============================================================
 class App {
 public:
     App();

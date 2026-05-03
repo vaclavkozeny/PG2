@@ -6,7 +6,6 @@ void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id, GLenum se
 	(void)length;
 	(void)userParam;
 
-	// Driver performance notifications are often informational rather than actionable.
 	// Keep real errors, but silence noisy performance chatter.
 	if (type == GL_DEBUG_TYPE_PERFORMANCE || severity == GL_DEBUG_SEVERITY_NOTIFICATION) {
 		return;

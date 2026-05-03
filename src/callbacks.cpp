@@ -32,6 +32,7 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int /*scancode*/, int a
             }
             break;
 
+        // Vsync toggle
         case GLFW_KEY_V:
             if (action == GLFW_PRESS) {
                 app->vsync = !app->vsync;

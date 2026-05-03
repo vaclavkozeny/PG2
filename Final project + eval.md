@@ -8,8 +8,8 @@ Send full project and installation procedures in advance (use gitlab.tul.cz, git
 
 ## ESSENTIALS: Each missing (non-functional) Essential = -25 points (partial functionality => partial decrement)
 
-- [ ]  3D GL Core profile + shaders version 4.6, GL debug enabled, JSON config file
-- [ ]  high performance => at least 60 FPS (display FPS)
+- []  3D GL Core profile + shaders version 4.6, GL debug enabled, JSON config file
+- []  high performance => at least 60 FPS (display FPS)
 - [ ]  allow VSync control, antialiasing, fullscreen vs. windowed switching (restore window position & size)
 - [ ]  event processing (camera, object, app behaviour...): mouse (both axes, wheel), keyboard
 - [ ]  multiple different independently moving 3D models, at leats two loaded from file

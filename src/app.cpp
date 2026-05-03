@@ -23,9 +23,7 @@ using json = nlohmann::json;
 #include "gl_err_callback.hpp"
 #include "glInfo.hpp"
 
-// ============================================================
 // Block materials — one per BlockType, used by draw_block().
-// ============================================================
 namespace {
 
 const Material& material_for(BlockType t) {
@@ -54,9 +52,7 @@ const Material& material_for(BlockType t) {
 
 } // namespace
 
-// ============================================================
 // Constructor / Destructor
-// ============================================================
 
 App::App() { std::cout << "Constructed...\n"; }
 
@@ -72,15 +68,14 @@ App::~App() {
     std::cout << "Bye...\n";
 }
 
-// ============================================================
 // OpenGL / GLFW bootstrap
-// ============================================================
 
 void App::initOpenGL() {
     load_config("resources/config.json");
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) throw std::runtime_error("GLFW init failed.");
 
+    // Setup OpenGL Core profile
     glfwWindowHint(GLFW_VISIBLE,               GLFW_FALSE);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
@@ -123,9 +118,10 @@ bool App::init() {
         initOpenGL();
 
         glEnable(GL_DEPTH_TEST);
-        glEnable(GL_MULTISAMPLE);
+        glEnable(GL_MULTISAMPLE); // MSAA enable
         glClearColor(0.45f, 0.65f, 0.88f, 1.0f);  // sky blue
 
+        // GL debug callback
         if (GLEW_ARB_debug_output) {
             glDebugMessageCallback(MessageCallback, nullptr);
             glEnable(GL_DEBUG_OUTPUT);
@@ -153,9 +149,7 @@ bool App::init() {
     return true;
 }
 
-// ============================================================
 // Asset init
-// ============================================================
 
 void App::init_assets() {
     init_shaders();
@@ -225,7 +219,7 @@ void App::init_scene() {
         trophy_bunny = std::make_shared<Model>(
             std::filesystem::path("../obj_samples/bunny_tri_vn.obj"), lit);
         trophy_bunny->setScale(glm::vec3(0.07f));
-        trophy_bunny->setPosition(glm::vec3(38.0f, 10.0f, 0.0f));
+        trophy_bunny->setPosition(glm::vec3(8.0f, 10.0f, 0.0f));
         trophy_bunny->meshes[0].texture = texture_library.at("white");
         std::cout << "Loaded trophy bunny." << std::endl;
     } catch (const std::exception& e) {
@@ -245,9 +239,7 @@ void App::init_scene() {
     }
 }
 
-// ============================================================
 // Spatial grid construction
-// ============================================================
 
 void App::build_collision_grid() {
     collision_grid.clear();
@@ -260,9 +252,7 @@ void App::build_collision_grid() {
     }
 }
 
-// ============================================================
 // Lighting initialization
-// ============================================================
 
 void App::init_lighting() {
     // ── Directional (animated sun) ────────────────────────────
@@ -327,9 +317,7 @@ void App::init_lighting() {
     spotLight.on          = true;
 }
 
-// ============================================================
 // Lighting upload
-// ============================================================
 
 void App::set_lighting_uniforms(const std::shared_ptr<ShaderProgram>& shader,
                                 const glm::mat4& view) const
@@ -366,9 +354,7 @@ void App::set_lighting_uniforms(const std::shared_ptr<ShaderProgram>& shader,
     shader->setUniform("spotLightOn",           spotLight.on ? 1 : 0);
 }
 
-// ============================================================
 // draw_block — draws one block instance from the shared mesh.
-// ============================================================
 
 void App::draw_block(const LevelBlock& block, const glm::mat4& view, float alpha) {
     auto& shader = shader_library.at("lighting");
@@ -393,9 +379,7 @@ void App::draw_block(const LevelBlock& block, const glm::mat4& view, float alpha
     block_meshes.at(block.type)->draw();
 }
 
-// ============================================================
 // draw_model_lit — Phong-lit draw for OBJ models.
-// ============================================================
 
 void App::draw_model_lit(const std::shared_ptr<Model>& mdl,
                          const Material& mat,
@@ -424,10 +408,8 @@ void App::draw_model_lit(const std::shared_ptr<Model>& mdl,
     }
 }
 
-// ============================================================
 // draw_scene — renders opaque blocks, OBJ models, then the
 // transparent (glass) blocks and particles in the blended pass.
-// ============================================================
 
 void App::draw_scene(const glm::mat4& view) {
     auto& shader = shader_library.at("lighting");
@@ -477,9 +459,7 @@ void App::draw_scene(const glm::mat4& view) {
     }
 }
 
-// ============================================================
 // Player physics
-// ============================================================
 
 void App::update_physics(float dt) {
     // ── Horizontal input (camera-relative, projected to XZ) ────
@@ -615,9 +595,7 @@ void App::respawn() {
     ++death_count;
 }
 
-// ============================================================
 // HUD — ImGui overlay
-// ============================================================
 
 void App::draw_hud() {
     if (!show_imgui) return;
@@ -667,9 +645,7 @@ void App::draw_hud() {
     }
 }
 
-// ============================================================
 // Main loop
-// ============================================================
 
 int App::run() {
     try {
@@ -714,7 +690,7 @@ int App::run() {
 
             if (deco_orb) {
                 // Orbits above the course at height 8, radius 6 around x=19
-                glm::vec3 centre{19.0f, 0.0f, 0.0f};
+                glm::vec3 centre{3.0f, 0.0f, 0.0f};
                 deco_orb->setPosition(centre + glm::vec3(
                     6.0f * std::cos(orb_angle), 8.0f, 6.0f * std::sin(orb_angle)));
             }
@@ -785,9 +761,7 @@ int App::run() {
     return EXIT_SUCCESS;
 }
 
-// ============================================================
 // Helpers
-// ============================================================
 
 void App::update_projection_matrix() {
     if (height < 1) height = 1;
@@ -848,6 +822,8 @@ GLFWmonitor* App::GetCurrentMonitor(GLFWwindow* window) {
     }
     return bestMonitor ? bestMonitor : glfwGetPrimaryMonitor();
 }
+
+// Load app config 
 void App::load_config(std::string filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {

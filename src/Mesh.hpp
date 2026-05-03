@@ -38,6 +38,7 @@ public:
     }    
 
     void draw() {
+        // OpenGL 4.1 - cannot use DSA (glCreateVertexArrays, glNamedBufferData)
         glBindVertexArray(vao_);
         
     	if (ebo_ == 0) {
@@ -72,6 +73,8 @@ private:
         // Create VAO
         glGenVertexArrays(1, &vao_);
         glBindVertexArray(vao_);
+
+        // OpenGL 4.1 - cannot use DSA
 
         // Create and fill VBO with vertex data
         glGenBuffers(1, &vbo_);

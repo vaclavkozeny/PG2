@@ -12,9 +12,7 @@
 #include "Mesh.hpp"
 #include "ShaderProgram.hpp"
 
-// ============================================================
 // Single particle — position/velocity/color/lifetime.
-// ============================================================
 struct Particle {
     glm::vec3 position;
     glm::vec3 velocity;
@@ -23,7 +21,6 @@ struct Particle {
     float     maxLifetime;  // total seconds at spawn
 };
 
-// ============================================================
 // Particle system
 //
 // Uses a shared mesh (e.g. tetrahedron) for all particles so
@@ -34,7 +31,6 @@ struct Particle {
 //   2. emit(...)           — fire a burst on a game event
 //   3. update(dt)          — call once per frame
 //   4. draw(shader, V, P)  — call inside the blended pass
-// ============================================================
 class ParticleSystem {
 public:
     // Physics constants

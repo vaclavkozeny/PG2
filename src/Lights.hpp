@@ -6,13 +6,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 
-// ============================================================
 // Light source descriptions.
 //
 // All positions/directions are expressed in WORLD SPACE on the
 // CPU side.  set_lighting_uniforms() transforms them to view
 // space before uploading to the GPU.
-// ============================================================
 
 constexpr std::size_t NUM_POINT_LIGHTS = 3;
 

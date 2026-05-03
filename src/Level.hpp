@@ -13,16 +13,10 @@
 #include "Mesh.hpp"
 #include "assets.hpp"
 
-// ============================================================
-// Atlas tile — one cell in the 16×16 tex_256.png texture.
-// (col, row) are 0-based, row 0 is the TOP row of the PNG.
-// ============================================================
 struct AtlasTile { int col, row; };
 
-// ============================================================
 // Block types supported by the level loader.
-// To add a new type: add enum value + entry in BLOCK_DEFS.
-// ============================================================
+// Related to entries in BLOCK_DEFS.
 enum class BlockType {
     Grass,
     Dirt,
@@ -35,14 +29,12 @@ enum class BlockType {
     Glass,   // transparent
 };
 
-// ============================================================
 // UV helpers — tex_256.png is flipped vertically by Texture.cpp
 // (cv::flip before upload), so PNG row 0 maps to GL V≈1.
 //
 // Formula for tile at (col, row) in PNG:
 //   U  = [col/16,   (col+1)/16]
 //   V  = [1-(row+1)/16, 1-row/16]
-// ============================================================
 inline glm::vec2 atlas_uv_min(AtlasTile t) {
     return { t.col / 16.0f, 1.0f - (t.row + 1) / 16.0f };
 }
@@ -50,13 +42,8 @@ inline glm::vec2 atlas_uv_max(AtlasTile t) {
     return { (t.col + 1) / 16.0f, 1.0f - t.row / 16.0f };
 }
 
-// ============================================================
 // BlockDef — UV tiles for each face of a cube block.
-//
-// Tile positions match the standard Minecraft terrain.png atlas.
-// Adjust col/row values if the provided tex_256.png uses a
-// different layout (open it in an image editor to verify).
-// ============================================================
+// + Transparent material settings
 struct BlockDef {
     AtlasTile top;
     AtlasTile sides;
@@ -66,10 +53,7 @@ struct BlockDef {
 };
 
 inline const std::unordered_map<BlockType, BlockDef>& block_defs() {
-    // Standard Minecraft terrain.png layout (row 0 = top of image):
-    //  (0,0)=grass_top  (1,0)=stone   (2,0)=dirt   (3,0)=cobblestone
-    //  (4,0)=oak_planks (0,1)=grass_side (2,1)=sand (4,1)=log_side (5,1)=log_top
-    //  (7,1)=gold_block  (1,3)=glass
+    // Map UV tiles to defs
     static const std::unordered_map<BlockType, BlockDef> defs {
         { BlockType::Grass,       { {0,0}, {0,1}, {2,0}, false, 1.0f } },
         { BlockType::Dirt,        { {2,0}, {2,0}, {2,0}, false, 1.0f } },
@@ -84,6 +68,7 @@ inline const std::unordered_map<BlockType, BlockDef>& block_defs() {
     return defs;
 }
 
+// helper fn 
 inline BlockType block_type_from_string(const std::string& s) {
     if (s == "grass")       return BlockType::Grass;
     if (s == "dirt")        return BlockType::Dirt;
@@ -97,18 +82,13 @@ inline BlockType block_type_from_string(const std::string& s) {
     return BlockType::Stone;
 }
 
-// ============================================================
-// LevelBlock — one block instance in the level.
-// grid coords are integer; world-space center = glm::vec3(grid).
-// ============================================================
+// One block instance in the level.
 struct LevelBlock {
     glm::ivec3 grid;
     BlockType  type;
 };
 
-// ============================================================
 // Level — all blocks + start/end meta.
-// ============================================================
 struct Level {
     std::vector<LevelBlock> blocks;
     glm::vec3 start_eye_pos{0.0f, 2.1f, 0.0f};
@@ -151,13 +131,11 @@ struct Level {
     }
 };
 
-// ============================================================
 // make_block_mesh — unit cube centred at origin with correct
 // atlas UV coordinates for the given BlockDef.
 //
 // 6 faces × 4 vertices = 24 verts, 6 faces × 6 indices = 36.
 // CCW winding viewed from outside.
-// ============================================================
 inline std::shared_ptr<Mesh> make_block_mesh(const BlockDef& def) {
     std::vector<Vertex>  verts;
     std::vector<GLuint>  idxs;
