@@ -665,7 +665,7 @@ int App::run() {
 
             // Animate directional (sun) light
             {
-                const float angle = static_cast<float>(now) * 0.20f;
+                const float angle = static_cast<float>(now) * 1.0f;
                 const float elev  = std::sin(angle);
                 dirLight.direction = glm::normalize(glm::vec3(
                     std::cos(angle), -std::abs(elev) - 0.1f, std::sin(angle)));
