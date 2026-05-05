@@ -58,6 +58,30 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int /*scancode*/, int a
             }
             break;
 
+        case GLFW_KEY_P:
+            if (action == GLFW_PRESS) {
+                app->save_screenshot();
+            }
+            break;
+
+        case GLFW_KEY_M:
+            if (action == GLFW_PRESS) {
+                app->msaa = !app->msaa;
+                if (app->msaa) {
+                    glEnable(GL_MULTISAMPLE);
+                } else {
+                    glDisable(GL_MULTISAMPLE);
+                }
+                std::cout << "MSAA: " << (app->msaa ? "ON" : "OFF") << '\n';
+            }
+            break;
+
+        case GLFW_KEY_B:
+            if (action == GLFW_PRESS) {
+                app->cycle_start_bunny_shader(1);
+            }
+            break;
+
         default:
             break;
         }

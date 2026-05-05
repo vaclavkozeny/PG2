@@ -164,8 +164,11 @@ void App::init_shaders() {
         shader_library.emplace(name, std::make_shared<ShaderProgram>(
             std::filesystem::path(v), std::filesystem::path(f)));
     };
-    load("lighting", "./lighting.vert", "./lighting.frag");
-    load("particle",  "./particle.vert",  "./particle.frag");
+    load("lighting",          "./lighting.vert", "./lighting.frag");
+    load("particle",          "./particle.vert",  "./particle.frag");
+    load("wave_distortion",   "./fx_shared.vert", "./wave_distortion.frag");
+    load("rainbow",           "./fx_shared.vert", "./GL_rainbow.frag");
+    load("bunny_transparent", "./fx_shared.vert", "./bunny_transparent.frag");
 }
 
 void App::init_textures() {
@@ -224,6 +227,22 @@ void App::init_scene() {
         std::cout << "Loaded trophy bunny." << std::endl;
     } catch (const std::exception& e) {
         std::cerr << "Could not load bunny: " << e.what() << "\n";
+    }
+
+    // Bunny on the start platform (reuse trophy bunny mesh)
+    try {
+        if (!trophy_bunny) {
+            throw std::runtime_error("Trophy bunny not loaded.");
+        }
+        start_bunny = std::make_shared<Model>();
+        start_bunny->meshes = trophy_bunny->meshes; // share mesh data
+        start_bunny->scale = glm::vec3(0.04f);
+        start_bunny->setPosition(glm::vec3(0.0f, 2.0f, -3.0f));
+        start_bunny->setEulerAngles(glm::vec3(0.0f, 90.0f, 0.0f));
+        cycle_start_bunny_shader(0);
+        std::cout << "Loaded start bunny using trophy bunny mesh." << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Could not create start bunny: " << e.what() << "\n";
     }
 
     // ── Particle mesh: tetrahedron (shared by all particles) ──
@@ -408,6 +427,61 @@ void App::draw_model_lit(const std::shared_ptr<Model>& mdl,
     }
 }
 
+// draw_model_custom — Draw model using shader from mesh package with time uniform
+void App::draw_model_custom(const std::shared_ptr<Model>& mdl,
+                            const glm::mat4& view,
+                            float time)
+{
+    if (!mdl) return;
+    for (const auto& pkg : mdl->meshes) {
+        if (!pkg.shader) continue;
+        
+        auto shader = pkg.shader;
+        shader->use();
+        shader->setUniform("uP_m", projection_matrix);
+        shader->setUniform("uV_m", view);
+
+        const glm::mat4 localM = Model::createModelMatrix(
+            pkg.origin, pkg.eulerAngles, pkg.scale);
+        shader->setUniform("uM_m", mdl->getModelMatrix() * localM);
+        
+        if (shader != shader_library.at("lighting")) {
+            shader->setUniform("iTime", time);
+        }
+
+        if (pkg.texture) { pkg.texture->bind(0); }
+        pkg.mesh->draw();
+    }
+}
+
+// set_model_shader — Easy shader swapping for models
+void App::set_model_shader(const std::shared_ptr<Model>& mdl,
+                           const std::shared_ptr<ShaderProgram>& shader) const
+{
+    if (!mdl || mdl->meshes.empty() || !shader) return;
+    for (auto& pkg : mdl->meshes) {
+        pkg.shader = shader;
+    }
+}
+
+void App::cycle_start_bunny_shader(int step) {
+    if (!start_bunny) return;
+
+    static const std::array<const char*, 4> kBunnyShaders{
+        "wave_distortion",
+        "rainbow",
+        "lighting",
+        "bunny_transparent"
+    };
+
+    const int count = static_cast<int>(kBunnyShaders.size());
+    start_bunny_shader_index = (start_bunny_shader_index + step) % count;
+    if (start_bunny_shader_index < 0) start_bunny_shader_index += count;
+
+    const auto& shader = shader_library.at(kBunnyShaders[start_bunny_shader_index]);
+    set_model_shader(start_bunny, shader);
+}
+
 // draw_scene — renders opaque blocks, OBJ models, then the
 // transparent (glass) blocks and particles in the blended pass.
 
@@ -426,6 +500,20 @@ void App::draw_scene(const glm::mat4& view) {
     static const Material MAT_ORB  { glm::vec3(0.15f), glm::vec3(0.8f), glm::vec3(0.7f), 64.0f  };
     static const Material MAT_BUNNY{ glm::vec3(0.15f), glm::vec3(0.8f), glm::vec3(0.1f), 16.0f };
     draw_model_lit(deco_orb,     MAT_ORB,   view);
+    {
+        static const std::array<const char*, 4> kBunnyShaders{
+            "wave_distortion",
+            "rainbow",
+            "lighting",
+            "bunny_transparent"
+        };
+        const int count = static_cast<int>(kBunnyShaders.size());
+        const int idx = (start_bunny_shader_index % count + count) % count;
+        const bool is_transparent = std::string(kBunnyShaders[idx]) == "bunny_transparent";
+        if (!is_transparent) {
+            draw_model_custom(start_bunny, view, elapsed_time);
+        }
+    }
     draw_model_lit(trophy_bunny, MAT_BUNNY, view);
 
     // ── Pass 2: Transparent blocks + particles (blended) ───────
@@ -449,6 +537,22 @@ void App::draw_scene(const glm::mat4& view) {
         for (const LevelBlock* b : glass_blocks) {
             const float alpha = block_defs().at(b->type).alpha;
             draw_block(*b, view, alpha);
+        }
+
+        // Draw transparent bunny variant in blended pass
+        if (start_bunny) {
+            static const std::array<const char*, 4> kBunnyShaders{
+                "wave_distortion",
+                "rainbow",
+                "lighting",
+                "bunny_transparent"
+            };
+            const int count = static_cast<int>(kBunnyShaders.size());
+            const int idx = (start_bunny_shader_index % count + count) % count;
+            const bool is_transparent = std::string(kBunnyShaders[idx]) == "bunny_transparent";
+            if (is_transparent) {
+                draw_model_custom(start_bunny, view, elapsed_time);
+            }
         }
 
         if (!particle_system.empty())
@@ -615,8 +719,21 @@ void App::draw_hud() {
         ImGui::Separator();
         ImGui::Text("FPS  %.0f", ImGui::GetIO().Framerate);
         ImGui::Separator();
-        ImGui::Text("WASD = move   Space = jump");
-        ImGui::Text("H = headlight   I = HUD   F = fullscreen");
+        static const std::array<const char*, 4> kBunnyShaders{
+            "wave_distortion",
+            "rainbow",
+            "lighting",
+            "bunny_transparent"
+        };
+        const int shader_count = static_cast<int>(kBunnyShaders.size());
+        const int idx = (start_bunny_shader_index % shader_count + shader_count) % shader_count;
+        ImGui::Text("Start bunny shader: %s", kBunnyShaders[idx]);
+        ImGui::Text("B = bunny shader cycle");
+        ImGui::Separator();
+        ImGui::Text("VSync: %s   MSAA: %s", vsync ? "ON" : "OFF", msaa ? "ON" : "OFF");
+        ImGui::Text("WASD = move   Space = jump   H = headlight   R = respawn");
+        ImGui::Text("I = HUD   F = fullscreen");
+        ImGui::Text("M = MSAA  V = VSync   P = screenshot");
         ImGui::Text("Right-click = release cursor");
         ImGui::End();
     }
@@ -696,6 +813,12 @@ int App::run() {
             }
             if (trophy_bunny) {
                 trophy_bunny->setEulerAngles(glm::vec3(0.0f, bunny_spin, 0.0f));
+            }
+            if (start_bunny) {
+                const float start_orbit = static_cast<float>(now) * 1.2f;
+                const glm::vec3 centre{0.0f, 2.0f, 0.0f};
+                start_bunny->setPosition(centre + glm::vec3(
+                    4.2f * std::cos(start_orbit), 0.0f, 4.2f * std::sin(start_orbit)));
             }
 
             // Game-phase-specific updates

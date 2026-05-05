@@ -94,10 +94,12 @@ private:
     void build_collision_grid();
 
     // ── OBJ-loaded scene decoration (satisfy "2 models from file") ─
-    std::shared_ptr<Model> deco_orb;     // orbiting sphere loaded from OBJ
-    std::shared_ptr<Model> trophy_bunny; // spinning bunny at the end
+    std::shared_ptr<Model> deco_orb;                 // orbiting sphere loaded from OBJ
+    std::shared_ptr<Model> start_bunny;              // bunny on the start platform
+    std::shared_ptr<Model> trophy_bunny;             // spinning bunny at the end
     float orb_angle   {0.0f};
     float bunny_spin  {0.0f};
+    int   start_bunny_shader_index{0};
 
     // ── Particle system ────────────────────────────────────────
     ParticleSystem particle_system;
@@ -123,8 +125,16 @@ private:
     void draw_model_lit(const std::shared_ptr<Model>&, const Material&,
                         const glm::mat4& view, float alpha = 1.0f);
 
+    void draw_model_custom(const std::shared_ptr<Model>&,
+                           const glm::mat4& view, float time);
+
     void set_lighting_uniforms(const std::shared_ptr<ShaderProgram>&,
                                const glm::mat4& view) const;
+
+    // ── Model shader helper ────────────────────────────────────
+    void set_model_shader(const std::shared_ptr<Model>&, 
+                          const std::shared_ptr<ShaderProgram>&) const;
+    void cycle_start_bunny_shader(int step);
 
     // ── HUD helpers ────────────────────────────────────────────
     void draw_hud();

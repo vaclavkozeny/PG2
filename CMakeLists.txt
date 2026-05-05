@@ -71,6 +71,7 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_SOURCE_DIR}/shaders/basic.vert
         ${CMAKE_SOURCE_DIR}/shaders/basic.frag
+        ${CMAKE_SOURCE_DIR}/shaders/fx_shared.vert
         ${CMAKE_SOURCE_DIR}/shaders/GL_rainbow.frag
         ${CMAKE_SOURCE_DIR}/shaders/tex.vert
         ${CMAKE_SOURCE_DIR}/shaders/tex.frag
@@ -78,6 +79,8 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         ${CMAKE_SOURCE_DIR}/shaders/lighting.frag
         ${CMAKE_SOURCE_DIR}/shaders/particle.vert
         ${CMAKE_SOURCE_DIR}/shaders/particle.frag
+        ${CMAKE_SOURCE_DIR}/shaders/wave_distortion.frag
+        ${CMAKE_SOURCE_DIR}/shaders/bunny_transparent.frag
         $<TARGET_FILE_DIR:${PROJECT_NAME}>
     COMMENT "Copying shaders to build directory"
 )
