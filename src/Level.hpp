@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -121,13 +122,27 @@ struct Level {
         }
     }
 
-    // True when the player (eye position) has reached the gold end platform.
-    bool at_end(const glm::vec3& eye_pos) const {
-        glm::vec3 feet = eye_pos - glm::vec3(0.0f, 1.6f, 0.0f);
-        float h_dist = glm::distance(
-            glm::vec2(feet.x, feet.z),
-            glm::vec2(end_pos.x, end_pos.z));
-        return h_dist < end_radius && feet.y >= end_pos.y - 0.6f;
+    bool is_on_block_type(const glm::vec3& feet_pos, float radius, BlockType type) const {
+        constexpr float kTopEps = 0.08f;
+        for (const auto& block : blocks) {
+            if (block.type != type) continue;
+            const float bx1 = block.grid.x - 0.5f;
+            const float bx2 = block.grid.x + 0.5f;
+            const float bz1 = block.grid.z - 0.5f;
+            const float bz2 = block.grid.z + 0.5f;
+            const float top = block.grid.y + 0.5f;
+
+            if (feet_pos.x + radius <= bx1 || feet_pos.x - radius >= bx2) continue;
+            if (feet_pos.z + radius <= bz1 || feet_pos.z - radius >= bz2) continue;
+            if (std::abs(feet_pos.y - top) > kTopEps) continue;
+            return true;
+        }
+        return false;
+    }
+
+    // True when the player is standing on a gold block.
+    bool at_end(const glm::vec3& feet_pos, float radius) const {
+        return is_on_block_type(feet_pos, radius, BlockType::Gold);
     }
 };
 

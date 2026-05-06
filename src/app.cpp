@@ -832,12 +832,12 @@ int App::run() {
                     respawn();
                 }
 
-                if (level.at_end(camera.Position)) {
+                if (player.grounded && level.at_end(player.feet, Player::RADIUS)) {
                     phase = GamePhase::Won;
                     completion_time = elapsed_time;
                     // Celebration firework burst
                     particle_system.emit(
-                        glm::vec3(38.0f, 9.5f, 0.0f),
+                        player.feet + glm::vec3(0.0f, 1.5f, 0.0f),
                         glm::vec3(1.0f, 0.85f, 0.1f), 60, 6.0f, 2.5f);
                     std::cout << "Completed in " << completion_time << "s!\n";
                 }
