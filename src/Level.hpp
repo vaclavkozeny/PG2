@@ -56,7 +56,7 @@ struct BlockDef {
 inline const std::unordered_map<BlockType, BlockDef>& block_defs() {
     // Map UV tiles to defs
     static const std::unordered_map<BlockType, BlockDef> defs {
-        { BlockType::Grass,       { {0,0}, {4,0}, {2,0}, false, 1.0f } },
+        { BlockType::Grass,       { {0,0}, {3,0}, {2,0}, false, 1.0f } },
         { BlockType::Dirt,        { {2,0}, {2,0}, {2,0}, false, 1.0f } },
         { BlockType::Stone,       { {1,0}, {1,0}, {1,0}, false, 1.0f } },
         { BlockType::Cobblestone, { {5,0}, {5,0}, {5,0}, false, 1.0f } },
