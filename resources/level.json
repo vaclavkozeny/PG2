@@ -66,7 +66,7 @@
     {"x": 3, "y": 0, "z": 0, "type": "planks"},
     {"x": 5, "y": 0, "z": 0, "type": "planks"},
     {"x": 7, "y": 0, "z": 0, "type": "planks"},
-    {"x": 9, "y": 0, "z": 0, "type": "stone"},
+    {"x": 9, "y": 0, "z": 0, "type": "grass"},
 
     {"comment": "=== SECTION 3: Climbing Stairs (ascending) ==="},
     {"x": 11, "y": 1, "z": 0, "type": "stone"},
@@ -82,8 +82,8 @@
     {"x": 21, "y": 4, "z": 1, "type": "planks"},
     {"x": 23, "y": 5, "z": -1, "type": "planks"},
     {"x": 25, "y": 5, "z": 1, "type": "planks"},
-    {"x": 27, "y": 5, "z": -2, "type": "planks"},
-    {"x": 29, "y": 5, "z": 2, "type": "planks"},
+    {"x": 27, "y": 5, "z": -2, "type": "grass"},
+    {"x": 29, "y": 5, "z": 2, "type": "grass"},
 
     {"comment": "=== SECTION 5: Narrow Beam Challenge ==="},
     {"x": 31, "y": 5, "z": 0, "type": "log"},
